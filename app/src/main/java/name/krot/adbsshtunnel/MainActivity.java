@@ -24,6 +24,7 @@ public final class MainActivity extends AppCompatActivity {
     private TextView status;
     private SwitchMaterial toggle;
     private TextView fingerprint;
+    private boolean checkingAddress;
     private final BroadcastReceiver receiver = new BroadcastReceiver() {
         @Override public void onReceive(Context c, Intent i) { refresh(); }
     };
@@ -99,7 +100,19 @@ public final class MainActivity extends AppCompatActivity {
         text("ssh -N -L 15555:127.0.0.1:ADB_PORT -p 19191 -i YOUR_KEY USER@PHONE\nadb connect 127.0.0.1:15555\n\nPair ADB first when using Wireless Debugging. Pin the SSH host key through a physical USB connection before using WAN.", 15);
         TextView addresses = text(addresses(), 15);
         text("A public routable mobile IPv4 is required for incoming WAN connections. An interface address does not prove public reachability. CGNAT, operator filtering and firewall rules can prevent connections.", 15);
-        button("Refresh addresses and server fingerprint", () -> { addresses.setText(addresses()); refresh(); });
+        TextView networkDiagnosis = text("External IPv4 has not been checked. Refresh sends an HTTPS request to api.ipify.org.", 15);
+        button("Refresh addresses, external IPv4 and fingerprint", () -> {
+            addresses.setText(addresses()); refresh();
+            if (checkingAddress) return;
+            checkingAddress = true; networkDiagnosis.setText("Checking external IPv4…");
+            new Thread(() -> {
+                String result;
+                try { result = NetworkDiagnostics.inspect(this); }
+                catch (Exception e) { result = "External IPv4 check failed: " + e.getClass().getSimpleName() + ": " + e.getMessage(); }
+                final String message = result;
+                runOnUiThread(() -> { checkingAddress = false; if (!isFinishing() && !isDestroyed()) networkDiagnosis.setText(message); });
+            }, "network-diagnostics").start();
+        });
         text("Server public key", 22);
         fingerprint = text(hostKey(), 14);
         if (Build.VERSION.SDK_INT >= 33 && checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED)

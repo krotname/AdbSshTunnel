@@ -46,7 +46,8 @@ gradle --offline --no-daemon testReleaseUnitTest lintRelease assembleRelease
 ```
 
 Use an isolated unprivileged environment without user secrets for compilation.
-Prepare SDK/dependency caches separately, then compile with no network. Sign
+The Red ARC workflow uses the repository's persistent toolchain/dependency cache
+and its existing network isolation from home services. Sign
 the reviewed APK in a separate process. One permanent signing key is used for
 GitHub and every future store, including the Play App Signing key.
 

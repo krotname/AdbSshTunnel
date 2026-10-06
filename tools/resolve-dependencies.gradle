@@ -1,0 +1,12 @@
+// Run only on the trusted local project while preparing an isolated cache.
+gradle.projectsEvaluated {
+    rootProject.tasks.register('cacheDependencies') {
+        doLast {
+            allprojects.each { project ->
+                project.configurations.findAll { it.canBeResolved }.each { configuration ->
+                    configuration.resolve()
+                }
+            }
+        }
+    }
+}

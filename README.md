@@ -34,7 +34,7 @@ an interface address or open TCP socket alone does not establish reachability.
 
 ## Build
 
-Java 17, Gradle 8.11.1, AGP 8.9.2, SDK 36, NDK 27.2.12479018,
+Java 17, Gradle 8.11.1, AGP 8.10.1, SDK 36, NDK 27.2.12479018,
 CMake 3.22.1. JNI/Dropbear is compiled from Sshd4a commit
 `897f9064a7279bff89538ec87729c43888f3b83d`.
 

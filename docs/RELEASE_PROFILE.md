@@ -6,7 +6,7 @@
 | Package | `name.krot.adbsshtunnel` |
 | Версия | `app/build.gradle`: 1.0.0 / 1 |
 | APK | Один APK с arm64-v8a и x86_64 |
-| Сборка | Black, изолированный контейнер UID/GID 1000, без сети и секретов |
+| Сборка | Red / Linux, изолированный непривилегированный ARC job с постоянным кэшем; Windows-сборки только White |
 | Toolchain | SDK 36 / JDK 21 / Java 17 / AGP 8.10.1 / Gradle 8.11.1 |
 | Native | Sshd4a `897f9064a7279bff89538ec87729c43888f3b83d`, NDK 27.2.12479018, CMake 3.22.1 |
 | Проверки | testReleaseUnitTest, lintRelease, assembleRelease, native restrictions, signature, devices |

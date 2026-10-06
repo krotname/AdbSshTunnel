@@ -1,0 +1,61 @@
+name: Android CI
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: android-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  android:
+    # Home runners accept only owner-controlled source; forks need an owner branch.
+    if: github.event_name != 'pull_request' || (github.event.pull_request.head.repo.full_name == github.repository && github.event.pull_request.user.login == github.repository_owner && github.actor == github.repository_owner && github.triggering_actor == github.repository_owner)
+    runs-on: ${{ fromJSON(vars.CI_RUNS_ON || '["arc-prod-adler-adbsshtunnel"]') }}
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
+        with:
+          persist-credentials: false
+      - name: Verify Red cache contract
+        run: arc-cache check-workflow --file .github/workflows/ci.yml --job "$GITHUB_JOB"
+      - name: Configure toolchain paths
+        shell: bash
+        run: |
+          echo "ANDROID_HOME=$ARC_CACHE_DIR/android-sdk" >> "$GITHUB_ENV"
+          echo "ANDROID_SDK_ROOT=$ARC_CACHE_DIR/android-sdk" >> "$GITHUB_ENV"
+      - uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: android-actions/setup-android@be39fa834029ff78f1a44aa3bb0819b8fc2bd8fd # v4.0.4
+        with:
+          packages: platform-tools
+      - name: Prepare pinned native source
+        shell: bash
+        run: |
+          git clone --no-checkout https://github.com/tfonteyn/Sshd4a.git vendor/Sshd4a
+          git -C vendor/Sshd4a checkout --detach 897f9064a7279bff89538ec87729c43888f3b83d
+          python3 tools/prepare-native.py
+          python3 tools/check-source.py
+      - name: Tests, lint and unsigned release
+        shell: bash
+        run: bash tools/ci-build.sh
+      - name: Save portable Gradle dependencies
+        if: always()
+        run: arc-cache gradle-save
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: unsigned-release-${{ github.sha }}
+          path: app/build/outputs/apk/release/*-unsigned.apk
+          if-no-files-found: error
+          retention-days: 3
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        if: always()
+        with:
+          name: reports-${{ github.sha }}
+          path: app/build/reports/
+          retention-days: 3

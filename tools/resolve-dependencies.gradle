@@ -2,7 +2,7 @@
 gradle.projectsEvaluated {
     rootProject.tasks.register('cacheDependencies') {
         doLast {
-            allprojects.each { project ->
+            rootProject.allprojects.each { project ->
                 project.configurations.findAll { it.canBeResolved }.each { configuration ->
                     configuration.resolve()
                 }

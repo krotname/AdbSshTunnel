@@ -10,6 +10,7 @@ import android.provider.Settings;
 import android.view.*;
 import android.widget.*;
 import androidx.appcompat.app.AppCompatActivity;
+import androidx.core.content.ContextCompat;
 import androidx.core.view.*;
 import com.google.android.material.button.MaterialButton;
 import com.google.android.material.switchmaterial.SwitchMaterial;
@@ -153,6 +154,11 @@ public final class MainActivity extends AppCompatActivity {
         return result.length() > 0 ? result.toString() : "No network address";
     }
     private void refresh() { status.setText(SshdService.state); toggle.setChecked(name.krot.adbsshtunnel.Settings.enabled(this)); if (fingerprint != null) fingerprint.setText(hostKey()); }
-    @Override protected void onStart() { super.onStart(); if (Build.VERSION.SDK_INT >= 33) registerReceiver(receiver, new IntentFilter("name.krot.adbsshtunnel.STATE"), Context.RECEIVER_NOT_EXPORTED); else registerReceiver(receiver, new IntentFilter("name.krot.adbsshtunnel.STATE")); refresh(); }
+    @Override protected void onStart() {
+        super.onStart();
+        ContextCompat.registerReceiver(this, receiver,
+                new IntentFilter("name.krot.adbsshtunnel.STATE"), ContextCompat.RECEIVER_NOT_EXPORTED);
+        refresh();
+    }
     @Override protected void onStop() { unregisterReceiver(receiver); super.onStop(); }
 }

@@ -55,7 +55,7 @@ public final class MainActivity extends AppCompatActivity {
         toggle = new SwitchMaterial(this); toggle.setText("SSH tunnel"); content.addView(toggle);
         toggle.setOnCheckedChangeListener((v, checked) -> {
             if (checked == name.krot.adbsshtunnel.Settings.enabled(this)) return;
-            try { if (checked) KeyPolicy.parse(name.krot.adbsshtunnel.Settings.keys(this)); SshdService.select(this, checked); }
+            try { if (!SshdService.select(this, checked)) { error(SshdService.state); toggle.setChecked(false); } }
             catch (Exception e) { error(e.getMessage()); toggle.setChecked(false); }
         });
         button("Add to Quick Settings", () -> {

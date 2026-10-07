@@ -17,6 +17,7 @@ public final class SshdService extends Service {
     public static volatile String state = "Stopped";
     private int serverPid;
     private volatile int generation;
+    private int discoveryGeneration;
     private boolean startupFailed;
     private int activePort;
     private CountDownLatch serverStopped = new CountDownLatch(0);
@@ -28,11 +29,23 @@ public final class SshdService extends Service {
     private native void kill(int pid);
     private native int waitpid(int pid);
     public static native String getDropbearVersion();
-    public static void select(Context c, boolean selected) {
+    public static boolean select(Context c, boolean selected) {
+        if (selected) {
+            try { KeyPolicy.parse(Settings.keys(c)); }
+            catch (IOException e) {
+                Settings.setEnabled(c, false);
+                c.stopService(new Intent(c, SshdService.class)); killOtherAppProcesses();
+                state = e.getMessage();
+                TileService.requestListeningState(c, new ComponentName(c, TunnelTile.class));
+                c.sendBroadcast(new Intent("name.krot.adbsshtunnel.STATE").setPackage(c.getPackageName()));
+                return false;
+            }
+        }
         Settings.setEnabled(c, selected);
         if (selected) c.startForegroundService(new Intent(c, SshdService.class));
         else { c.stopService(new Intent(c, SshdService.class)); killOtherAppProcesses(); }
         TileService.requestListeningState(c, new ComponentName(c, TunnelTile.class));
+        return true;
     }
     private static void killOtherAppProcesses() {
         File[] entries = new File("/proc").listFiles(); if (entries == null) return;
@@ -64,17 +77,18 @@ public final class SshdService extends Service {
     @Override public int onStartCommand(Intent intent, int flags, int startId) {
         if (!Settings.enabled(this)) { stopSelf(); return START_NOT_STICKY; }
         stopNative();
+        int discoveryToken = ++discoveryGeneration;
         if (discovery != null) { discovery.close(); discovery = null; }
         startupFailed = false;
-        try { KeyPolicy.parse(Settings.keys(this)); } catch (IOException e) { startupFailed = true; publish(e.getMessage()); stopSelf(); return START_NOT_STICKY; }
+        try { KeyPolicy.parse(Settings.keys(this)); } catch (IOException e) { Settings.setEnabled(this, false); startupFailed = true; publish(e.getMessage()); stopSelf(); return START_NOT_STICKY; }
         boolean rootMode = Settings.prefs(this).getBoolean("root_mode", false);
         if (rootMode) checkRootGuard();
         else {
             publish("Waiting for Wireless Debugging");
             discovery = new AdbDiscovery(this, (port, message) -> main.post(() -> {
-                if (!Settings.enabled(this)) return;
+                if (discoveryToken != discoveryGeneration || !Settings.enabled(this) || Settings.prefs(this).getBoolean("root_mode", false)) return;
                 if (port == 0) { stopNative(); publish(message); }
-                else if (port != activePort || !running) startForPort(port);
+                else if (port != activePort || !running) startForPort(port, true);
             }));
             discovery.start();
         }
@@ -90,23 +104,26 @@ public final class SshdService extends Service {
             catch (InterruptedException e) { Thread.currentThread().interrupt(); failure = "Root check interrupted"; }
             final String error = failure;
             main.post(() -> {
-                if (token != generation || !Settings.enabled(this)) return;
+                if (token != generation || !Settings.enabled(this) || !Settings.prefs(this).getBoolean("root_mode", false)) return;
                 if (error != null) { publish(error); return; }
-                startForPort(5555);
+                startForPort(5555, false);
             });
         });
     }
-    private void startForPort(int port) {
+    private void startForPort(int port, boolean wireless) {
         stopNative();
         int token = ++generation;
         publish("Checking local ADB " + port);
         probes.execute(() -> {
             String failure = null;
-            try (Socket socket = new Socket()) { socket.connect(new InetSocketAddress("127.0.0.1", port), 1000); }
+            try {
+                if (wireless) AdbTlsProbe.verify(port);
+                else try (Socket socket = new Socket()) { socket.connect(new InetSocketAddress("127.0.0.1", port), 1000); }
+            }
             catch (IOException e) { failure = "Local ADB unavailable; configure debugging first"; }
             final String error = failure;
             main.post(() -> {
-                if (token != generation || !Settings.enabled(this)) return;
+                if (token != generation || !Settings.enabled(this) || wireless == Settings.prefs(this).getBoolean("root_mode", false)) return;
                 if (error != null) { publish(error); return; }
                 try {
                     Settings.writePolicy(this, port);
@@ -156,6 +173,7 @@ public final class SshdService extends Service {
         killOtherAppProcesses();
     }
     @Override public void onDestroy() {
+        ++discoveryGeneration;
         stopNative(); if (discovery != null) discovery.close(); discovery = null;
         probes.shutdownNow(); main.removeCallbacksAndMessages(null);
         if (!startupFailed) state = "Stopped";

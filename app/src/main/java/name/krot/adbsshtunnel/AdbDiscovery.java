@@ -17,7 +17,7 @@ public final class AdbDiscovery implements AutoCloseable {
     private final NsdManager.DiscoveryListener discovery = new NsdManager.DiscoveryListener() {
         public void onDiscoveryStarted(String type) { }
         public void onDiscoveryStopped(String type) { }
-        public void onStartDiscoveryFailed(String type, int code) { callback.onPort(0, "ADB discovery unavailable: " + code); }
+        public void onStartDiscoveryFailed(String type, int code) { if (!closed) callback.onPort(0, "ADB discovery unavailable: " + code); }
         public void onStopDiscoveryFailed(String type, int code) { }
         public void onServiceFound(NsdServiceInfo service) {
             manager.resolveService(service, new NsdManager.ResolveListener() {
@@ -31,7 +31,7 @@ public final class AdbDiscovery implements AutoCloseable {
                             InetAddress host = s.getHost();
                             if (host == null || !(host.isLoopbackAddress() || NetworkInterface.getByInetAddress(host) != null)) return;
                             int port = s.getPort();
-                            try (Socket socket = new Socket()) { socket.connect(new InetSocketAddress("127.0.0.1", port), 750); }
+                            AdbTlsProbe.verify(port);
                             localServices.add(s.getServiceName());
                             activeName = s.getServiceName();
                             if (!closed) callback.onPort(port, "Wireless Debugging: " + port);

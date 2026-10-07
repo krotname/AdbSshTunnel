@@ -41,4 +41,21 @@ public class KeyPolicyTest {
         assertTrue(policy.contains("permitlisten=\"0\""));
         assertTrue(policy.contains("no-pty,no-agent-forwarding,no-X11-forwarding"));
     }
+    private String rsa(byte[] exponent, byte[] modulus) throws Exception {
+        ByteArrayOutputStream bytes = new ByteArrayOutputStream(); DataOutputStream out = new DataOutputStream(bytes);
+        byte[] type = "ssh-rsa".getBytes(java.nio.charset.StandardCharsets.US_ASCII);
+        for (byte[] field : new byte[][] {type, exponent, modulus}) { out.writeInt(field.length); out.write(field); }
+        return "ssh-rsa " + Base64.getEncoder().encodeToString(bytes.toByteArray());
+    }
+    @Test public void requiresPositiveCanonicalRsaFields() throws Exception {
+        byte[] modulus = new byte[257]; modulus[1] = (byte) 0x80; modulus[256] = 1;
+        byte[] exponent = {1, 0, 1};
+        assertEquals(1, KeyPolicy.parse(rsa(exponent, modulus)).size());
+        byte[] negative = modulus.clone(); negative[0] = (byte) 0x80;
+        byte[] redundant = new byte[258]; System.arraycopy(modulus, 0, redundant, 1, modulus.length);
+        for (String invalid : new String[] {rsa(exponent, negative), rsa(exponent, redundant), rsa(new byte[] {0, 1, 0, 1}, modulus), rsa(new byte[] {(byte) 0x81}, modulus)}) {
+            try { KeyPolicy.parse(invalid); fail("Accepted a noncanonical or negative RSA mpint"); }
+            catch (IOException expected) { }
+        }
+    }
 }

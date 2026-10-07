@@ -28,8 +28,8 @@ public final class KeyPolicy {
                 } else {
                     byte[] exponent = readField(stream, 16);
                     byte[] modulus = readField(stream, 1025);
-                    java.math.BigInteger e = new java.math.BigInteger(exponent);
-                    java.math.BigInteger n = new java.math.BigInteger(modulus);
+                    BigInteger e = positiveMpint(exponent);
+                    BigInteger n = positiveMpint(modulus);
                     if (e.signum() <= 0 || !e.testBit(0) || e.compareTo(java.math.BigInteger.valueOf(3)) < 0 || n.bitLength() < 2048 || !n.testBit(0))
                         throw new IOException("RSA key must be at least 2048 bits");
                 }
@@ -40,6 +40,13 @@ public final class KeyPolicy {
         }
         if (keys.isEmpty() || keys.size() > 32) throw new IOException("Import between 1 and 32 public keys");
         return keys;
+    }
+    private static BigInteger positiveMpint(byte[] bytes) throws IOException {
+        if ((bytes[0] & 0x80) != 0 || (bytes[0] == 0 && (bytes.length == 1 || (bytes[1] & 0x80) == 0)))
+            throw new IOException("RSA fields must be positive canonical mpints");
+        BigInteger value = new BigInteger(bytes);
+        if (value.signum() <= 0) throw new IOException("RSA fields must be positive");
+        return value;
     }
     private static final BigInteger P = BigInteger.ONE.shiftLeft(255).subtract(BigInteger.valueOf(19));
     private static final BigInteger TWO = BigInteger.valueOf(2);

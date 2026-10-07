@@ -118,7 +118,7 @@ public final class SshdService extends Service {
             String failure = null;
             try {
                 if (wireless) AdbTlsProbe.verify(port);
-                else try (Socket socket = new Socket()) { socket.connect(new InetSocketAddress("127.0.0.1", port), 1000); }
+                else AdbTlsProbe.verifyPlain(port);
             }
             catch (IOException e) { failure = "Local ADB unavailable; configure debugging first"; }
             final String error = failure;
@@ -138,7 +138,7 @@ public final class SshdService extends Service {
                     new Thread(() -> {
                         try { waitpid(startedPid); } finally { stopped.countDown(); }
                         main.post(() -> {
-                            if (serverPid == startedPid) { serverPid = 0; running = false; publish("SSH exited"); }
+                            if (serverPid == startedPid && token == generation) { serverPid = 0; failAndStop("SSH exited; enable the tunnel to retry"); }
                         });
                     }, "ssh-exit").start();
                     probes.execute(() -> {
@@ -155,14 +155,18 @@ public final class SshdService extends Service {
                         final boolean listening = ready;
                         main.post(() -> {
                             if (token != generation) return;
-                            running = listening;
-                            if (!listening) stopNative();
-                            publish(listening ? "SSH :19191 → ADB :" + port : "SSH listener failed");
+                            if (!listening) { failAndStop("SSH listener failed"); return; }
+                            running = true;
+                            publish("SSH :19191 → ADB :" + port);
                         });
                     });
-                } catch (IOException e) { stopNative(); publish(e.getMessage()); }
+                } catch (IOException e) { failAndStop(e.getMessage()); }
             });
         });
+    }
+    private void failAndStop(String message) {
+        Settings.setEnabled(this, false); startupFailed = true;
+        stopNative(); publish(message); stopSelf();
     }
     private void stopNative() {
         ++generation; running = false; activePort = 0;

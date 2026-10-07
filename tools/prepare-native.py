@@ -8,6 +8,19 @@ PIN = "897f9064a7279bff89538ec87729c43888f3b83d"
 source = ROOT / "vendor" / "Sshd4a"
 if subprocess.check_output(["git", "-C", str(source), "rev-parse", "HEAD"], text=True).strip() != PIN:
     raise SystemExit("Unexpected upstream revision")
+# Match Dropbear's ifndef_wrapper.sh without requiring a Unix shell on Windows.
+# The upstream CMake target expects this generated header before compilation.
+dropbear = source / "app/src/main/cpp/dropbear"
+defaults = (dropbear / "src/default_options.h").read_text()
+guarded = re.sub(
+    r"^( *#define ([^ \n]+) .*)$",
+    lambda match: f"#ifndef {match.group(2)}\n{match.group(1)}\n#endif",
+    defaults,
+    flags=re.MULTILINE,
+)
+if guarded == defaults:
+    raise SystemExit("Dropbear default option definitions changed upstream")
+(dropbear / "src/default_options_guard.h").write_text(guarded)
 cmake = (source / "app/CMakeLists.txt").read_text()
 cmake = cmake.replace("cmake_minimum_required(VERSION 4.1.2)", "cmake_minimum_required(VERSION 3.22.1)")
 cmake = cmake[:cmake.index("# build scp executable")]

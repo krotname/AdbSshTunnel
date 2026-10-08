@@ -29,6 +29,11 @@ jobs:
           persist-credentials: false
       - name: Verify Red cache contract
         run: arc-cache check-workflow --file .github/workflows/ci.yml --job "$GITHUB_JOB"
+      - name: Native connection lifecycle regression
+        shell: bash
+        run: |
+          cc -std=c11 -Wall -Wextra -Werror tools/test-tunnel-parent.c -o "$RUNNER_TEMP/tunnel-parent-test"
+          "$RUNNER_TEMP/tunnel-parent-test"
       - name: Configure toolchain paths
         shell: bash
         run: |

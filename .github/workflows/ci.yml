@@ -55,7 +55,11 @@ jobs:
           python3 tools/check-source.py
       - name: Tests, lint and unsigned release
         shell: bash
-        run: bash tools/ci-build.sh
+        run: |
+          mkdir -p "$RUNNER_TEMP/host-key-check"
+          javac -d "$RUNNER_TEMP/host-key-check" app/src/main/java/name/krot/adbsshtunnel/HostKeyPublic.java tools/TestHostKeyPublic.java
+          java -cp "$RUNNER_TEMP/host-key-check" TestHostKeyPublic
+          bash tools/ci-build.sh
       - name: Save portable Gradle dependencies
         if: always()
         run: arc-cache gradle-save

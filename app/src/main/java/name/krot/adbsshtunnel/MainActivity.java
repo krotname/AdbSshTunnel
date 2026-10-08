@@ -124,16 +124,8 @@ public final class MainActivity extends AppCompatActivity {
         try {
             File file = new File(name.krot.adbsshtunnel.Settings.config(this), "dropbear_ed25519_host_key");
             if (!file.isFile()) return "Created on first SSH startup. Verify via USB before trusting it.";
-            try (DataInputStream stream = new DataInputStream(new FileInputStream(file))) {
-                int typeLength = stream.readInt();
-                if (typeLength != 11) return "Unexpected server key format";
-                byte[] type = new byte[typeLength]; stream.readFully(type);
-                if (!new String(type, java.nio.charset.StandardCharsets.US_ASCII).equals("ssh-ed25519")) return "Unexpected server key type";
-                int publicLength = stream.readInt(); if (publicLength != 32) return "Invalid server public key";
-                byte[] publicBytes = new byte[publicLength]; stream.readFully(publicBytes);
-                ByteArrayOutputStream blob = new ByteArrayOutputStream(); DataOutputStream out = new DataOutputStream(blob);
-                out.writeInt(type.length); out.write(type); out.writeInt(publicBytes.length); out.write(publicBytes);
-                String key = "ssh-ed25519 " + Base64.getEncoder().encodeToString(blob.toByteArray());
+            try (InputStream stream = new FileInputStream(file)) {
+                String key = HostKeyPublic.read(stream);
                 return KeyPolicy.fingerprint(key) + "\n" + key;
             }
         } catch (Exception e) { return "Cannot read server fingerprint: " + e.getMessage(); }

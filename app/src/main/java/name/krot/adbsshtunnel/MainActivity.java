@@ -5,6 +5,7 @@ import android.app.*;
 import android.content.*;
 import android.content.pm.PackageManager;
 import android.graphics.drawable.Icon;
+import android.net.Uri;
 import android.os.*;
 import android.provider.Settings;
 import android.view.*;
@@ -26,6 +27,8 @@ public final class MainActivity extends AppCompatActivity {
     private SwitchMaterial toggle;
     private TextView fingerprint;
     private boolean checkingAddress;
+    private NetworkMonitor networkMonitor;
+    private NetworkPolicyView wifiPolicy, mobilePolicy;
     private final BroadcastReceiver receiver = new BroadcastReceiver() {
         @Override public void onReceive(Context c, Intent i) { refresh(); }
     };
@@ -67,6 +70,22 @@ public final class MainActivity extends AppCompatActivity {
                 });
             else error("Open Quick Settings edit mode and add ADB SSH Tunnel.");
         });
+        text("Network access", 22);
+        text("Wi-Fi and mobile rules are independent of WireGuard. New lists start closed. Saving a rule closes existing SSH connections. Android permissions identify the network; unavailable identities stay closed.", 15);
+        button("Grant Wi-Fi and mobile identity permissions", () -> requestPermissions(new String[] {
+            Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION,
+            Manifest.permission.READ_PHONE_STATE}, 2));
+        button("Background Wi-Fi identity permission", () -> {
+            startActivity(new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:" + getPackageName())));
+            Toast.makeText(this, "For Wi-Fi rules after reboot: Location → Allow all the time. The app reads SSID, not GPS coordinates.", Toast.LENGTH_LONG).show();
+        });
+        button("Open Android location settings", () -> startActivity(new Intent(Settings.ACTION_LOCATION_SOURCE_SETTINGS)));
+        Runnable rulesChanged = () -> {
+            if (name.krot.adbsshtunnel.Settings.enabled(this)) SshdService.select(this, true);
+            if (networkMonitor != null) networkMonitor.refresh();
+        };
+        wifiPolicy = new NetworkPolicyView(this, NetworkSettings.Kind.WIFI, rulesChanged); content.addView(wifiPolicy);
+        mobilePolicy = new NetworkPolicyView(this, NetworkSettings.Kind.MOBILE, rulesChanged); content.addView(mobilePolicy);
         text("ADB setup", 22);
         SwitchMaterial root = new SwitchMaterial(this); root.setText("Root ADB (port 5555)");
         root.setChecked(name.krot.adbsshtunnel.Settings.prefs(this).getBoolean("root_mode", false)); content.addView(root);
@@ -98,12 +117,11 @@ public final class MainActivity extends AppCompatActivity {
             } catch (IOException e) { error(e.getMessage()); }
         });
         text("Connect", 22);
-        text("ssh -N -L 15555:127.0.0.1:ADB_PORT -p 19191 -i YOUR_KEY USER@PHONE\nadb connect 127.0.0.1:15555\n\nPair ADB first when using Wireless Debugging. Pin the SSH host key through a physical USB connection before using WAN.", 15);
-        TextView addresses = text(addresses(), 15);
+        text("ssh -N -L 15555:127.0.0.1:5555 -p 19191 -i YOUR_KEY USER@PHONE\nadb connect 127.0.0.1:15555\n\nThe target stays 127.0.0.1:5555 when Android changes its Wireless Debugging port. Reconnect SSH and ADB after a port or network change. Pair ADB first. Pin the SSH host key through physical USB before WAN use.", 15);
         text("A public routable mobile IPv4 is required for incoming WAN connections. An interface address does not prove public reachability. CGNAT, operator filtering and firewall rules can prevent connections.", 15);
         TextView networkDiagnosis = text("External IPv4 has not been checked. Refresh sends an HTTPS request to api.ipify.org.", 15);
         button("Refresh addresses, external IPv4 and fingerprint", () -> {
-            addresses.setText(addresses()); refresh();
+            if (networkMonitor != null) networkMonitor.refresh(); refresh();
             if (checkingAddress) return;
             checkingAddress = true; networkDiagnosis.setText("Checking external IPv4…");
             new Thread(() -> {
@@ -130,27 +148,24 @@ public final class MainActivity extends AppCompatActivity {
             }
         } catch (Exception e) { return "Cannot read server fingerprint: " + e.getMessage(); }
     }
-    private String addresses() {
-        StringBuilder result = new StringBuilder();
-        try {
-            Enumeration<NetworkInterface> interfaces = NetworkInterface.getNetworkInterfaces();
-            while (interfaces.hasMoreElements()) {
-                NetworkInterface iface = interfaces.nextElement(); if (!iface.isUp()) continue;
-                Enumeration<InetAddress> addrs = iface.getInetAddresses();
-                while (addrs.hasMoreElements()) {
-                    InetAddress addr = addrs.nextElement();
-                    if (addr instanceof Inet4Address && !addr.isLoopbackAddress()) result.append(iface.getName()).append(": ").append(addr.getHostAddress()).append(":19191\n");
-                }
-            }
-        } catch (SocketException e) { return "Network addresses unavailable"; }
-        return result.length() > 0 ? result.toString() : "No network address";
+    private void watchNetworks() {
+        if (networkMonitor != null) networkMonitor.close();
+        networkMonitor = new NetworkMonitor(this, entries -> { wifiPolicy.showNetworks(entries); mobilePolicy.showNetworks(entries); });
+        networkMonitor.start();
     }
     private void refresh() { status.setText(SshdService.state); toggle.setChecked(name.krot.adbsshtunnel.Settings.enabled(this)); if (fingerprint != null) fingerprint.setText(hostKey()); }
     @Override protected void onStart() {
         super.onStart();
         ContextCompat.registerReceiver(this, receiver,
                 new IntentFilter("name.krot.adbsshtunnel.STATE"), ContextCompat.RECEIVER_NOT_EXPORTED);
-        refresh();
+        watchNetworks(); refresh();
     }
-    @Override protected void onStop() { unregisterReceiver(receiver); super.onStop(); }
+    @Override public void onRequestPermissionsResult(int request, String[] permissions, int[] results) {
+        super.onRequestPermissionsResult(request, permissions, results);
+        if (request == 2) {
+            watchNetworks();
+            if (name.krot.adbsshtunnel.Settings.enabled(this)) SshdService.select(this, true);
+        }
+    }
+    @Override protected void onStop() { if (networkMonitor != null) networkMonitor.close(); networkMonitor = null; unregisterReceiver(receiver); super.onStop(); }
 }

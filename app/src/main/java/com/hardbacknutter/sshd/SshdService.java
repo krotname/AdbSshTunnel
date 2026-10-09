@@ -5,9 +5,13 @@ import android.content.*;
 import android.os.*;
 import android.service.quicksettings.TileService;
 import android.system.Os;
+import android.Manifest;
+import android.content.pm.PackageManager;
+import android.content.pm.ServiceInfo;
 import java.io.*;
 import java.net.*;
 import java.util.concurrent.*;
+import java.util.*;
 import name.krot.adbsshtunnel.*;
 
 /** JNI keeps its upstream class name. The server always runs under the app UID. */
@@ -20,6 +24,10 @@ public final class SshdService extends Service {
     private int discoveryGeneration;
     private boolean startupFailed;
     private int activePort;
+    private int desiredPort, pendingPort;
+    private NetworkMonitor networkMonitor;
+    public static volatile List<NetworkMonitor.Entry> networks = Collections.emptyList();
+    private String networkSignature = "";
     private CountDownLatch serverStopped = new CountDownLatch(0);
     private AdbDiscovery discovery;
     private final Handler main = new Handler(Looper.getMainLooper());
@@ -42,7 +50,7 @@ public final class SshdService extends Service {
             }
         }
         Settings.setEnabled(c, selected);
-        if (selected) c.startForegroundService(new Intent(c, SshdService.class));
+        if (selected) c.startForegroundService(new Intent(c, SshdService.class).putExtra("from_activity", c instanceof Activity));
         else { c.stopService(new Intent(c, SshdService.class)); killOtherAppProcesses(); }
         TileService.requestListeningState(c, new ComponentName(c, TunnelTile.class));
         return true;
@@ -72,13 +80,25 @@ public final class SshdService extends Service {
     @Override public void onCreate() {
         super.onCreate(); killOtherAppProcesses();
         getSystemService(NotificationManager.class).createNotificationChannel(new NotificationChannel("tunnel", "ADB SSH Tunnel", NotificationManager.IMPORTANCE_LOW));
-        state = "Starting"; startForeground(19191, notification());
+        state = "Starting";
+        startForeground(19191, notification(), Build.VERSION.SDK_INT >= 34 ? ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE : 0);
     }
     @Override public int onStartCommand(Intent intent, int flags, int startId) {
         if (!Settings.enabled(this)) { stopSelf(); return START_NOT_STICKY; }
         stopNative();
         int discoveryToken = ++discoveryGeneration;
         if (discovery != null) { discovery.close(); discovery = null; }
+        if (networkMonitor != null) networkMonitor.close();
+        desiredPort = 0; networks = Collections.emptyList(); networkSignature = "";
+        if (checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED
+            && ((intent != null && intent.getBooleanExtra("from_activity", false))
+                || checkSelfPermission(Manifest.permission.ACCESS_BACKGROUND_LOCATION) == PackageManager.PERMISSION_GRANTED)) {
+            try { startForeground(19191, notification(), ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION
+                | (Build.VERSION.SDK_INT >= 34 ? ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE : 0)); }
+            catch (SecurityException e) { publish("Open the app to identify Wi-Fi"); }
+        }
+        networkMonitor = new NetworkMonitor(this, entries -> { networks = entries; reconcile(); });
+        networkMonitor.start();
         startupFailed = false;
         try { KeyPolicy.parse(Settings.keys(this)); } catch (IOException e) { Settings.setEnabled(this, false); startupFailed = true; publish(e.getMessage()); stopSelf(); return START_NOT_STICKY; }
         boolean rootMode = Settings.prefs(this).getBoolean("root_mode", false);
@@ -87,15 +107,16 @@ public final class SshdService extends Service {
             publish("Waiting for Wireless Debugging");
             discovery = new AdbDiscovery(this, (port, message) -> main.post(() -> {
                 if (discoveryToken != discoveryGeneration || !Settings.enabled(this) || Settings.prefs(this).getBoolean("root_mode", false)) return;
+                desiredPort = port;
                 if (port == 0) { stopNative(); publish(message); }
-                else if (port != activePort || !running) startForPort(port, true);
+                else reconcile();
             }));
             discovery.start();
         }
         return START_STICKY;
     }
     private void checkRootGuard() {
-        int token = ++generation;
+        int token = discoveryGeneration;
         publish("Checking root ADB protection");
         probes.execute(() -> {
             String failure = null;
@@ -104,15 +125,39 @@ public final class SshdService extends Service {
             catch (InterruptedException e) { Thread.currentThread().interrupt(); failure = "Root check interrupted"; }
             final String error = failure;
             main.post(() -> {
-                if (token != generation || !Settings.enabled(this) || !Settings.prefs(this).getBoolean("root_mode", false)) return;
+                if (token != discoveryGeneration || !Settings.enabled(this) || !Settings.prefs(this).getBoolean("root_mode", false)) return;
                 if (error != null) { publish(error); return; }
-                startForPort(5555, false);
+                desiredPort = 5555; reconcile();
             });
         });
     }
-    private void startForPort(int port, boolean wireless) {
+    private void reconcile() {
+        if (!Settings.enabled(this)) return;
+        SortedSet<String> addresses = new TreeSet<>();
+        StringBuilder signature = new StringBuilder();
+        for (NetworkMonitor.Entry entry : networks) {
+            signature.append(entry.handle).append('/').append(entry.kind).append('/')
+                .append(entry.identity == null ? -1 : entry.identity.length()).append(':').append(entry.identity)
+                .append('/').append(entry.decision.allowed).append('/').append(entry.addresses).append(';');
+            if (entry.decision.allowed) addresses.addAll(entry.addresses);
+        }
+        String updated = signature.toString();
+        if (!updated.equals(networkSignature)) { stopNative(); networkSignature = updated; }
+        if (addresses.isEmpty()) {
+            stopNative();
+            publish(networks.isEmpty() ? "No available Wi-Fi or mobile Internet network"
+                : "SSH closed: no allowed network. Check lists and Android permissions");
+            return;
+        }
+        if (desiredPort == 0) { publish("Waiting for local ADB: configure the selected mode"); return; }
+        if (activePort == desiredPort && (running || pendingPort == desiredPort)) return;
+        if (pendingPort == desiredPort) return;
+        startForPort(desiredPort, !Settings.prefs(this).getBoolean("root_mode", false), addresses);
+    }
+    private void startForPort(int port, boolean wireless, SortedSet<String> addresses) {
         stopNative();
         int token = ++generation;
+        pendingPort = port;
         publish("Checking local ADB " + port);
         probes.execute(() -> {
             String failure = null;
@@ -124,12 +169,14 @@ public final class SshdService extends Service {
             final String error = failure;
             main.post(() -> {
                 if (token != generation || !Settings.enabled(this) || wireless == Settings.prefs(this).getBoolean("root_mode", false)) return;
-                if (error != null) { publish(error); return; }
+                if (error != null) { pendingPort = 0; publish(error); return; }
                 try {
-                    Settings.writePolicy(this, port);
+                    Settings.writePolicy(this, 5555);
                     File config = Settings.config(this);
-                    String[] args = {"sshd", "-e", "-R", "-F", "-s", "-k", "-T", "3", "-p", "0.0.0.0:19191", "-c", "/system/bin/false"};
-                    serverPid = start_sshd(getApplicationInfo().nativeLibraryDir, args, config.getPath(), getFilesDir().getPath(), "/system/bin/false", "", false, true, false);
+                    List<String> arguments = new ArrayList<>(Arrays.asList("sshd", "-e", "-R", "-F", "-s", "-k", "-T", "3", "-c", "/system/bin/false"));
+                    arguments.add("-p"); arguments.add("127.0.0.1:19191");
+                    for (String address : addresses) { arguments.add("-p"); arguments.add(address + ":19191"); }
+                    serverPid = start_sshd(getApplicationInfo().nativeLibraryDir, arguments.toArray(new String[0]), config.getPath(), getFilesDir().getPath(), "/system/bin/false", "ADB_TUNNEL_PORT=" + port, false, true, false);
                     if (serverPid <= 0) throw new IOException("SSH startup failed");
                     int startedPid = serverPid;
                     CountDownLatch stopped = new CountDownLatch(1); serverStopped = stopped;
@@ -157,7 +204,8 @@ public final class SshdService extends Service {
                             if (token != generation) return;
                             if (!listening) { failAndStop("SSH listener failed"); return; }
                             running = true;
-                            publish("SSH :19191 → ADB :" + port);
+                            pendingPort = 0;
+                            publish("SSH :19191 → ADB :" + port + " · client target 127.0.0.1:5555");
                         });
                     });
                 } catch (IOException e) { failAndStop(e.getMessage()); }
@@ -169,7 +217,7 @@ public final class SshdService extends Service {
         stopNative(); publish(message); stopSelf();
     }
     private void stopNative() {
-        ++generation; running = false; activePort = 0;
+        ++generation; running = false; activePort = 0; pendingPort = 0;
         if (serverPid > 0) {
             kill(serverPid); serverPid = 0;
             try { serverStopped.await(1, TimeUnit.SECONDS); } catch (InterruptedException e) { Thread.currentThread().interrupt(); }
@@ -179,6 +227,7 @@ public final class SshdService extends Service {
     @Override public void onDestroy() {
         ++discoveryGeneration;
         stopNative(); if (discovery != null) discovery.close(); discovery = null;
+        if (networkMonitor != null) networkMonitor.close(); networkMonitor = null; networks = Collections.emptyList();
         probes.shutdownNow(); main.removeCallbacksAndMessages(null);
         if (!startupFailed) state = "Stopped";
         TileService.requestListeningState(this, new ComponentName(this, TunnelTile.class));

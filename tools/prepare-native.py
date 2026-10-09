@@ -54,6 +54,27 @@ if '#include "tunnel-parent.h"' not in text:
         1,
     )
     jni.write_text(text)
+# Set only the server child's environment; forwarding channels cannot change it.
+text = jni.read_text()
+env_needle = "        env_var_list = from_java_string(env, j_env_var_list);"
+if "/* Tunnel target environment */" not in text:
+    if text.count(env_needle) != 1:
+        raise SystemExit("JNI environment setup changed upstream")
+    jni.write_text(text.replace(env_needle, env_needle + "\n        sshd4a_set_env(); /* Tunnel target environment */", 1))
+forward = dropbear / "src/svr-tcpfwd.c"
+text = forward.read_text()
+shutil.copyfile(ROOT / "tools/tunnel-target.h", jni.parent / "tunnel-target.h")
+if '#include "../../tunnel-target.h"' not in text:
+    needle = "    snprintf(portstring, sizeof(portstring), \"%u\", destport);"
+    host_needle = "    destport = buf_getint(ses.payload);"
+    if text.count(needle) != 1 or text.count(host_needle) != 1:
+        raise SystemExit("Direct forwarding target changed upstream")
+    text = '#include "../../tunnel-target.h"\n' + text.replace(
+        host_needle, "    unsigned int tunnel_host_len = len;\n" + host_needle, 1,
+    ).replace(needle,
+        '    destport = adb_tunnel_target(desthost, tunnel_host_len, destport, getenv("ADB_TUNNEL_PORT"));\n'
+        '    if (!destport) goto out;\n' + needle, 1)
+    forward.write_text(text)
 server = dropbear / "src/svr-main.c"
 text = server.read_text()
 if '#include "../../tunnel-parent.h"' not in text:

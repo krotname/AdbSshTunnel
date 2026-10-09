@@ -1,5 +1,6 @@
 #define _POSIX_C_SOURCE 200809L
 #include "tunnel-parent.h"
+#include "tunnel-target.h"
 #include <errno.h>
 #include <poll.h>
 #include <stdio.h>
@@ -82,6 +83,16 @@ static int check_tree(int kill_app) {
 }
 
 int main(void) {
+    if (adb_tunnel_target("127.0.0.1", 9, 5555, "40041") != 40041 ||
+        adb_tunnel_target("127.0.0.1", 9, 5555, "40173") != 40173 ||
+        adb_tunnel_target("127.0.0.1", 9, 5555, "5555") != 5555) return 3;
+    const char *invalid[] = {NULL, "", "0", "65536", "999999", "22x", "-22", "+22", " 22", "22\n"};
+    for (size_t i = 0; i < sizeof(invalid) / sizeof(invalid[0]); ++i)
+        if (adb_tunnel_target("127.0.0.1", 9, 5555, invalid[i])) return 3;
+    if (adb_tunnel_target("localhost", 9, 5555, "40041") ||
+        adb_tunnel_target("127.0.0.1", 10, 5555, "40041") ||
+        adb_tunnel_target("127.0.0.1", 9, 40041, "40041") ||
+        adb_tunnel_target("127.0.0.2", 9, 5555, "40041")) return 3;
     if (prctl(PR_SET_CHILD_SUBREAPER, 1) != 0) return 2;
     if (!check_tree(0)) { fputs("Server stop left a connection alive\n", stderr); return 1; }
     if (!check_tree(1)) { fputs("App death left a server or connection alive\n", stderr); return 1; }
@@ -92,6 +103,6 @@ int main(void) {
     if (waitpid(child, &status, 0) != child || !WIFEXITED(status) || WEXITSTATUS(status) != 126) {
         fputs("Changed parent was accepted\n", stderr); return 1;
     }
-    puts("Server stop, app death and changed-parent checks passed");
+    puts("Stable ADB target, invalid destinations, server stop, app death and changed-parent checks passed");
     return 0;
 }

@@ -50,27 +50,36 @@ public final class NetworkMonitor implements AutoCloseable {
         final PhoneStateListener listener;
         PhoneWatch(TelephonyManager manager, PhoneStateListener listener) { this.manager = manager; this.listener = listener; }
     }
-    private final ConnectivityManager.NetworkCallback callback;
+    private ConnectivityManager.NetworkCallback callback;
     private final BroadcastReceiver location = new BroadcastReceiver() {
-        @Override public void onReceive(Context c, Intent i) { emit(); }
+        @Override public void onReceive(Context c, Intent i) { refresh(); }
     };
     public NetworkMonitor(Context context, Listener listener) {
         this.context = context; this.listener = listener;
         manager = context.getSystemService(ConnectivityManager.class);
-        callback = Build.VERSION.SDK_INT >= 31 ? new Callback(ConnectivityManager.NetworkCallback.FLAG_INCLUDE_LOCATION_INFO) : new Callback();
     }
     private final class Callback extends ConnectivityManager.NetworkCallback {
             Callback() { super(); }
             @androidx.annotation.RequiresApi(31) Callback(int flags) { super(flags); }
-            @Override public void onAvailable(Network network) { observed.put(network, new Observed()); emit(); }
+            private boolean current() { return !closed && callback == this; }
+            @Override public void onAvailable(Network network) {
+                if (!current()) return;
+                observed.put(network, new Observed()); emit();
+            }
             @Override public void onCapabilitiesChanged(Network network, NetworkCapabilities caps) {
+                if (!current()) return;
                 observed.computeIfAbsent(network, n -> new Observed()).capabilities = caps; emit();
             }
             @Override public void onLinkPropertiesChanged(Network network, LinkProperties links) {
+                if (!current()) return;
                 observed.computeIfAbsent(network, n -> new Observed()).links = links; emit();
             }
-            @Override public void onLost(Network network) { observed.remove(network); emit(); }
+            @Override public void onLost(Network network) {
+                if (!current()) return;
+                observed.remove(network); emit();
+            }
             @Override public void onBlockedStatusChanged(Network network, boolean blocked) {
+                if (!current()) return;
                 observed.computeIfAbsent(network, n -> new Observed()).blocked = blocked; emit();
             }
     }
@@ -80,10 +89,7 @@ public final class NetworkMonitor implements AutoCloseable {
             ContextCompat.registerReceiver(context, location,
                 new IntentFilter(LocationManager.MODE_CHANGED_ACTION), ContextCompat.RECEIVER_NOT_EXPORTED);
             receiverRegistered = true;
-            manager.registerNetworkCallback(new NetworkRequest.Builder()
-                .addCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
-                .addCapability(NetworkCapabilities.NET_CAPABILITY_NOT_VPN).build(), callback, main);
-            registered = true;
+            registerNetworks();
             subscriptions = context.getSystemService(SubscriptionManager.class);
             if (subscriptions != null && ContextCompat.checkSelfPermission(context, Manifest.permission.READ_PHONE_STATE) == PackageManager.PERMISSION_GRANTED) {
                 subscriptions.addOnSubscriptionsChangedListener(context.getMainExecutor(), subscriptionChanges);
@@ -91,7 +97,27 @@ public final class NetworkMonitor implements AutoCloseable {
             }
         } catch (RuntimeException e) { close(); listener.onNetworks(Collections.emptyList()); }
     }
-    public void refresh() { emit(); }
+    private void registerNetworks() {
+        callback = Build.VERSION.SDK_INT >= 31
+            ? new Callback(ConnectivityManager.NetworkCallback.FLAG_INCLUDE_LOCATION_INFO) : new Callback();
+        manager.registerNetworkCallback(new NetworkRequest.Builder()
+            .addCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
+            .addCapability(NetworkCapabilities.NET_CAPABILITY_NOT_VPN).build(), callback, main);
+        registered = true;
+    }
+    public void refresh() {
+        if (closed) return;
+        ConnectivityManager.NetworkCallback previous = callback;
+        callback = null;
+        boolean wasRegistered = registered;
+        registered = false;
+        observed.clear();
+        emit();
+        try {
+            if (wasRegistered) manager.unregisterNetworkCallback(previous);
+            registerNetworks();
+        } catch (RuntimeException e) { close(); listener.onNetworks(Collections.emptyList()); }
+    }
     private boolean canReadWifi() {
         LocationManager locationManager = context.getSystemService(LocationManager.class);
         return ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED

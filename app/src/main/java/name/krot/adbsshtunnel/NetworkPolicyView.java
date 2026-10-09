@@ -65,7 +65,10 @@ public final class NetworkPolicyView extends LinearLayout {
             if (entry.kind != kind) continue;
             value.append(entry.label).append(" · ").append(entry.identity == null ? "identity unavailable" : entry.identity)
                 .append("\n").append(entry.decision.allowed && entry.addresses.isEmpty() ? "No usable IPv4 / blocked by Android" : NetworkSettings.reason(entry.decision.reason));
-            for (String address : entry.addresses) value.append("\n").append(entry.interfaceName).append(": ").append(address).append(":19191");
+            for (String address : entry.addresses) {
+                value.append("\n").append(entry.interfaceName).append(": ").append(address);
+                if (entry.decision.allowed) value.append(":19191");
+            }
             value.append("\n");
         }
         current.setText(value.length() == 0 ? "No physical Internet network of this type" : value.toString());

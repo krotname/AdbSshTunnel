@@ -64,4 +64,29 @@ public class AdbTlsProbeTest {
             catch (IOException expected) { }
         }
     }
+    @Test public void checksRootAuthAndLegacyConnectChecksums() throws Exception {
+        byte[] token = new byte[20]; Arrays.fill(token, (byte) 7);
+        byte[][] responses = {packet(0x48545541, 1, 0, token),
+                packet(0x4e584e43, 0x01000000, 4096, "device::\0".getBytes(StandardCharsets.US_ASCII))};
+        int[] checksums = {140, 740};
+        for (int i = 0; i < responses.length; i++) {
+            ByteBuffer.wrap(responses[i]).order(ByteOrder.LITTLE_ENDIAN).putInt(16, checksums[i]);
+            AdbTlsProbe.exchangePlain(new ByteArrayInputStream(responses[i]), new ByteArrayOutputStream());
+            ByteBuffer.wrap(responses[i]).order(ByteOrder.LITTLE_ENDIAN).putInt(16, checksums[i] + 1);
+            try { AdbTlsProbe.exchangePlain(new ByteArrayInputStream(responses[i]), new ByteArrayOutputStream()); fail("Accepted a bad checksum"); }
+            catch (IOException expected) { }
+        }
+    }
+    @Test public void rejectsTruncatedPayloadsAndUnboundedRootFrames() throws Exception {
+        byte[] auth = packet(0x48545541, 1, 0, new byte[20]);
+        byte[] connect = packet(0x4e584e43, 0x01000001, 4096, "device::\0".getBytes(StandardCharsets.US_ASCII));
+        byte[] unterminated = packet(0x4e584e43, 0x01000001, 4096, "device::".getBytes(StandardCharsets.US_ASCII));
+        for (byte[] response : new byte[][] {Arrays.copyOf(auth, auth.length - 1), Arrays.copyOf(connect, connect.length - 1),
+                unterminated, reply(0x4e584e43, 0x01000001, 4096, -1, 0, ~0x4e584e43),
+                reply(0x4e584e43, 0x01000001, 4096, 4097, 0, ~0x4e584e43),
+                reply(0x4e584e43, 0x01000001, 1048577, 9, 0, ~0x4e584e43)}) {
+            try { AdbTlsProbe.exchangePlain(new ByteArrayInputStream(response), new ByteArrayOutputStream()); fail("Accepted a malformed root frame"); }
+            catch (IOException expected) { }
+        }
+    }
 }

@@ -118,7 +118,7 @@ public final class MainActivity extends AppCompatActivity {
         });
         shell.addView(navigation, new LinearLayout.LayoutParams(-1, -2));
         setContentView(shell);
-        page.addOnLayoutChangeListener((v, l, t, r, b, oldL, oldT, oldR, oldB) -> fitPage());
+        page.addOnLayoutChangeListener((v, l, t, r, b, oldL, oldT, oldR, oldB) -> page.post(this::fitPage));
         ViewCompat.setOnApplyWindowInsetsListener(shell, (v, insets) -> {
             androidx.core.graphics.Insets bars = insets.getInsets(
                 WindowInsetsCompat.Type.systemBars() | WindowInsetsCompat.Type.displayCutout());
@@ -144,6 +144,7 @@ public final class MainActivity extends AppCompatActivity {
             default: tunnelPage();
         }
         refresh();
+        page.post(this::fitPage);
     }
     private void fitPage() {
         if (controlsInDialog || controls == null || page.getWidth() == 0 || page.getHeight() == 0) return;

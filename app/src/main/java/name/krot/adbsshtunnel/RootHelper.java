@@ -19,7 +19,8 @@ public final class RootHelper {
             while (buffer.size() < 8192 && (count = input.read(chunk, 0, Math.min(chunk.length, 8192 - buffer.size()))) != -1) buffer.write(chunk, 0, count);
             output = new String(buffer.toByteArray(), java.nio.charset.StandardCharsets.UTF_8).trim();
         }
-        if (process.exitValue() != 0) throw new IOException("Root helper denied or not installed: " + output);
+        int exitCode = process.exitValue();
+        if (exitCode != 0) throw new IOException("Root helper request failed (exit " + exitCode + ")" + (output.isEmpty() ? "" : ": " + output));
         return output;
     }
 }

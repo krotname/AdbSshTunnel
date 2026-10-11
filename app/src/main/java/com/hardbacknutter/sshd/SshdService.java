@@ -4,7 +4,6 @@ import android.app.*;
 import android.content.*;
 import android.os.*;
 import android.service.quicksettings.TileService;
-import android.system.Os;
 import android.Manifest;
 import android.content.pm.PackageManager;
 import android.content.pm.ServiceInfo;
@@ -32,6 +31,7 @@ public final class SshdService extends Service {
     private AdbDiscovery discovery;
     private final Handler main = new Handler(Looper.getMainLooper());
     private final ExecutorService probes = Executors.newSingleThreadExecutor();
+    private Future<?> rootCheck;
     private native int start_sshd(String lib, String[] args, String conf, String home, String shell,
                                   String env, boolean shellAccess, boolean publicKeys, boolean singleUsePasswords);
     private native void kill(int pid);
@@ -42,7 +42,7 @@ public final class SshdService extends Service {
             try { KeyPolicy.parse(Settings.keys(c)); }
             catch (IOException e) {
                 Settings.setEnabled(c, false);
-                c.stopService(new Intent(c, SshdService.class)); killOtherAppProcesses();
+                c.stopService(new Intent(c, SshdService.class));
                 state = e.getMessage();
                 TileService.requestListeningState(c, new ComponentName(c, TunnelTile.class));
                 c.sendBroadcast(new Intent("name.krot.adbsshtunnel.STATE").setPackage(c.getPackageName()));
@@ -51,19 +51,9 @@ public final class SshdService extends Service {
         }
         Settings.setEnabled(c, selected);
         if (selected) c.startForegroundService(new Intent(c, SshdService.class).putExtra("from_activity", c instanceof Activity));
-        else { c.stopService(new Intent(c, SshdService.class)); killOtherAppProcesses(); }
+        else c.stopService(new Intent(c, SshdService.class));
         TileService.requestListeningState(c, new ComponentName(c, TunnelTile.class));
         return true;
-    }
-    private static void killOtherAppProcesses() {
-        File[] entries = new File("/proc").listFiles(); if (entries == null) return;
-        for (File entry : entries) {
-            try {
-                int pid = Integer.parseInt(entry.getName());
-                if (pid != android.os.Process.myPid() && Os.stat(entry.getPath()).st_uid == android.os.Process.myUid())
-                    android.os.Process.killProcess(pid);
-            } catch (Exception ignored) { }
-        }
     }
     private Notification notification() {
         PendingIntent open = PendingIntent.getActivity(this, 0, new Intent(this, MainActivity.class), PendingIntent.FLAG_IMMUTABLE);
@@ -78,13 +68,14 @@ public final class SshdService extends Service {
         sendBroadcast(new Intent("name.krot.adbsshtunnel.STATE").setPackage(getPackageName()));
     }
     @Override public void onCreate() {
-        super.onCreate(); killOtherAppProcesses();
+        super.onCreate();
         getSystemService(NotificationManager.class).createNotificationChannel(new NotificationChannel("tunnel", "ADB SSH Tunnel", NotificationManager.IMPORTANCE_LOW));
         state = "Starting";
         startForeground(19191, notification(), Build.VERSION.SDK_INT >= 34 ? ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE : 0);
     }
     @Override public int onStartCommand(Intent intent, int flags, int startId) {
         if (!Settings.enabled(this)) { stopSelf(); return START_NOT_STICKY; }
+        cancelRootCheck();
         stopNative();
         int discoveryToken = ++discoveryGeneration;
         if (discovery != null) { discovery.close(); discovery = null; }
@@ -116,9 +107,10 @@ public final class SshdService extends Service {
         return START_STICKY;
     }
     private void checkRootGuard() {
+        cancelRootCheck();
         int token = discoveryGeneration;
         publish("Checking root ADB protection");
-        probes.execute(() -> {
+        rootCheck = probes.submit(() -> {
             String failure = null;
             try { RootHelper.verifyGuard(); }
             catch (IOException e) { failure = e.getMessage(); }
@@ -130,6 +122,11 @@ public final class SshdService extends Service {
                 desiredPort = 5555; reconcile();
             });
         });
+    }
+    private void cancelRootCheck() {
+        Future<?> request = rootCheck;
+        rootCheck = null;
+        if (request != null) request.cancel(true);
     }
     private void reconcile() {
         if (!Settings.enabled(this)) return;
@@ -222,10 +219,12 @@ public final class SshdService extends Service {
             kill(serverPid); serverPid = 0;
             try { serverStopped.await(1, TimeUnit.SECONDS); } catch (InterruptedException e) { Thread.currentThread().interrupt(); }
         }
-        killOtherAppProcesses();
+        // Native parent-death guards close forwarding children with this server.
+        // Other app-owned processes can be active root-helper requests.
     }
     @Override public void onDestroy() {
         ++discoveryGeneration;
+        cancelRootCheck();
         stopNative(); if (discovery != null) discovery.close(); discovery = null;
         if (networkMonitor != null) networkMonitor.close(); networkMonitor = null; networks = Collections.emptyList();
         probes.shutdownNow(); main.removeCallbacksAndMessages(null);

@@ -35,6 +35,14 @@ public class KeyPolicyTest {
             try { KeyPolicy.parse(input); fail(input); } catch (IOException expected) { }
         }
     }
+    @Test public void rejectsCommentOnlyAndMixedInvalidKeySets() throws Exception {
+        String invalidPoint = key("ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff");
+        for (String input : new String[] {" \n# no trusted keys\n", key() + "\nssh-ed25519 !!!!",
+                invalidPoint + "\n" + key(), key() + "\n" + invalidPoint, key() + "\ncommand=\"sh\" " + key()}) {
+            try { KeyPolicy.parse(input); fail("Accepted an invalid key set"); }
+            catch (IOException expected) { }
+        }
+    }
     @Test public void restrictedToExactLocalPort() throws Exception {
         String policy = KeyPolicy.restricted(KeyPolicy.parse(key()), 37121);
         assertTrue(policy.contains("permitopen=\"127.0.0.1:37121\""));
@@ -55,6 +63,16 @@ public class KeyPolicyTest {
         byte[] redundant = new byte[258]; System.arraycopy(modulus, 0, redundant, 1, modulus.length);
         for (String invalid : new String[] {rsa(exponent, negative), rsa(exponent, redundant), rsa(new byte[] {0, 1, 0, 1}, modulus), rsa(new byte[] {(byte) 0x81}, modulus)}) {
             try { KeyPolicy.parse(invalid); fail("Accepted a noncanonical or negative RSA mpint"); }
+            catch (IOException expected) { }
+        }
+    }
+    @Test public void rejectsUnsignedLookingNegativeAndZeroRsaFields() throws Exception {
+        byte[] modulus = new byte[257]; modulus[1] = (byte) 0x80; modulus[256] = 1;
+        byte[] missingSignByte = Arrays.copyOfRange(modulus, 1, modulus.length);
+        byte[] exponent = {1, 0, 1};
+        for (String invalid : new String[] {rsa(exponent, missingSignByte), rsa(exponent, new byte[] {0}),
+                rsa(new byte[] {0}, modulus), rsa(new byte[0], modulus), rsa(exponent, new byte[0])}) {
+            try { KeyPolicy.parse(invalid); fail("Accepted a negative, zero or empty RSA field"); }
             catch (IOException expected) { }
         }
     }

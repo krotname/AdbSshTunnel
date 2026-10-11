@@ -31,6 +31,7 @@ public final class SshdService extends Service {
     private AdbDiscovery discovery;
     private final Handler main = new Handler(Looper.getMainLooper());
     private final ExecutorService probes = Executors.newSingleThreadExecutor();
+    private Future<?> rootCheck;
     private native int start_sshd(String lib, String[] args, String conf, String home, String shell,
                                   String env, boolean shellAccess, boolean publicKeys, boolean singleUsePasswords);
     private native void kill(int pid);
@@ -74,6 +75,7 @@ public final class SshdService extends Service {
     }
     @Override public int onStartCommand(Intent intent, int flags, int startId) {
         if (!Settings.enabled(this)) { stopSelf(); return START_NOT_STICKY; }
+        cancelRootCheck();
         stopNative();
         int discoveryToken = ++discoveryGeneration;
         if (discovery != null) { discovery.close(); discovery = null; }
@@ -105,9 +107,10 @@ public final class SshdService extends Service {
         return START_STICKY;
     }
     private void checkRootGuard() {
+        cancelRootCheck();
         int token = discoveryGeneration;
         publish("Checking root ADB protection");
-        probes.execute(() -> {
+        rootCheck = probes.submit(() -> {
             String failure = null;
             try { RootHelper.verifyGuard(); }
             catch (IOException e) { failure = e.getMessage(); }
@@ -119,6 +122,11 @@ public final class SshdService extends Service {
                 desiredPort = 5555; reconcile();
             });
         });
+    }
+    private void cancelRootCheck() {
+        Future<?> request = rootCheck;
+        rootCheck = null;
+        if (request != null) request.cancel(true);
     }
     private void reconcile() {
         if (!Settings.enabled(this)) return;
@@ -216,6 +224,7 @@ public final class SshdService extends Service {
     }
     @Override public void onDestroy() {
         ++discoveryGeneration;
+        cancelRootCheck();
         stopNative(); if (discovery != null) discovery.close(); discovery = null;
         if (networkMonitor != null) networkMonitor.close(); networkMonitor = null; networks = Collections.emptyList();
         probes.shutdownNow(); main.removeCallbacksAndMessages(null);

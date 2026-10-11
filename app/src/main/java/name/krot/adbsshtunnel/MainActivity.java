@@ -28,7 +28,8 @@ import java.util.*;
 public final class MainActivity extends AppCompatActivity {
     private static final int TUNNEL = 1, NETWORKS = 2, ADB = 3, PREFERENCES = 4;
     private int selectedTab = TUNNEL;
-    private LinearLayout page;
+    private LinearLayout page, controls;
+    private boolean controlsInDialog;
     private TextView status, wifiSummary, mobileSummary;
     private SwitchMaterial toggle;
     private NetworkMonitor networkMonitor;
@@ -84,6 +85,7 @@ public final class MainActivity extends AppCompatActivity {
     }
     private LinearLayout groups() {
         LinearLayout row = new LinearLayout(this);
+        controls = row;
         row.setOrientation(wide ? LinearLayout.HORIZONTAL : LinearLayout.VERTICAL);
         page.addView(row, new LinearLayout.LayoutParams(-1, wide ? -1 : -2));
         return row;
@@ -116,6 +118,7 @@ public final class MainActivity extends AppCompatActivity {
         });
         shell.addView(navigation, new LinearLayout.LayoutParams(-1, -2));
         setContentView(shell);
+        page.addOnLayoutChangeListener((v, l, t, r, b, oldL, oldT, oldR, oldB) -> fitPage());
         ViewCompat.setOnApplyWindowInsetsListener(shell, (v, insets) -> {
             androidx.core.graphics.Insets bars = insets.getInsets(
                 WindowInsetsCompat.Type.systemBars() | WindowInsetsCompat.Type.displayCutout());
@@ -132,6 +135,7 @@ public final class MainActivity extends AppCompatActivity {
         super.onSaveInstanceState(state);
     }
     private void showPage() {
+        controlsInDialog = false;
         page.removeAllViews(); status = null; toggle = null; wifiSummary = null; mobileSummary = null;
         switch (selectedTab) {
             case NETWORKS: networksPage(); break;
@@ -140,6 +144,29 @@ public final class MainActivity extends AppCompatActivity {
             default: tunnelPage();
         }
         refresh();
+    }
+    private void fitPage() {
+        if (controlsInDialog || controls == null || page.getWidth() == 0 || page.getHeight() == 0) return;
+        int width = page.getWidth() - page.getPaddingLeft() - page.getPaddingRight();
+        int height = page.getHeight() - page.getPaddingTop() - page.getPaddingBottom();
+        controls.measure(View.MeasureSpec.makeMeasureSpec(width, View.MeasureSpec.EXACTLY),
+            View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED));
+        if (controls.getMeasuredHeight() <= height) return;
+        // Keep the main tabs fixed; reduced windows get their controls in a separate editor.
+        controlsInDialog = true;
+        LinearLayout content = controls;
+        page.removeView(content);
+        button(page, R.string.open_controls, () -> {
+            if (content.getParent() != null) return;
+            ScrollView scroll = new ScrollView(this);
+            scroll.addView(content, new ScrollView.LayoutParams(-1, -2));
+            androidx.appcompat.app.AlertDialog dialog = new androidx.appcompat.app.AlertDialog.Builder(this)
+                .setTitle(selectedTab == NETWORKS ? R.string.tab_networks : selectedTab == ADB
+                    ? R.string.tab_adb : selectedTab == PREFERENCES ? R.string.tab_settings : R.string.tab_tunnel)
+                .setView(scroll).setPositiveButton(R.string.close, null).create();
+            dialog.setOnDismissListener(d -> scroll.removeView(content));
+            dialog.show();
+        });
     }
     private void tunnelPage() {
         LinearLayout row = groups(), primary = card(row);
@@ -354,6 +381,7 @@ public final class MainActivity extends AppCompatActivity {
         if (toggle != null) toggle.setChecked(name.krot.adbsshtunnel.Settings.enabled(this));
         if (wifiSummary != null) wifiSummary.setText(summary(NetworkSettings.Kind.WIFI));
         if (mobileSummary != null) mobileSummary.setText(summary(NetworkSettings.Kind.MOBILE));
+        page.post(this::fitPage);
     }
     @Override protected void onStart() {
         super.onStart();

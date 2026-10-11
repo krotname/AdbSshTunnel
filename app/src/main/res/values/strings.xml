@@ -104,4 +104,8 @@
     <string name="diag_wifi">The external address differs from Wi-Fi. Incoming WAN access may require router port forwarding; this app does not change the router.</string>
     <string name="diag_nat">External and interface addresses differ. NAT is present; a public address alone does not provide an incoming mapping.</string>
     <string name="diag_test">Incoming SSH reachability must be tested from another network.</string>
+    <string name="open_controls">Open controls</string>
+    <string name="listener_failed">SSH listener failed</string>
+    <string name="ssh_exited">SSH exited; enable the tunnel to retry</string>
+    <string name="discovery_error">ADB discovery unavailable: %1$s</string>
 </resources>

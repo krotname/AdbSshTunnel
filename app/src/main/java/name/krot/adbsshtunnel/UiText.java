@@ -39,6 +39,8 @@ public final class UiText {
             case "Local ADB unavailable; configure debugging first": id = R.string.adb_unavailable; break;
             case "ADB discovery unavailable": id = R.string.discovery_unavailable; break;
             case "Wireless Debugging stopped; enable it in Developer options": id = R.string.discovery_stopped; break;
+            case "SSH listener failed": id = R.string.listener_failed; break;
+            case "SSH exited; enable the tunnel to retry": id = R.string.ssh_exited; break;
             case "Import between 1 and 32 public keys": id = R.string.key_range; break;
             case "Use ssh-ed25519 or ssh-rsa public keys without options": id = R.string.key_format; break;
             case "Invalid Base64 public key": id = R.string.key_base64; break;
@@ -49,6 +51,8 @@ public final class UiText {
         if (id != 0) return context.getString(id);
         String prefix = "Checking local ADB ";
         if (state.startsWith(prefix)) return context.getString(R.string.checking_adb, state.substring(prefix.length()));
+        prefix = "ADB discovery unavailable: ";
+        if (state.startsWith(prefix)) return context.getString(R.string.discovery_error, state.substring(prefix.length()));
         prefix = "SSH :19191 → ADB :";
         int end = state.indexOf(" · client target 127.0.0.1:5555");
         if (state.startsWith(prefix) && end > prefix.length())

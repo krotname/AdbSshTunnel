@@ -104,4 +104,8 @@
     <string name="diag_wifi">Внешний адрес отличается от адреса Wi-Fi. Для доступа из интернета может понадобиться перенаправление порта на роутере; приложение не меняет роутер.</string>
     <string name="diag_nat">Внешний адрес отличается от адреса интерфейса. Обнаружен NAT; сам публичный адрес не создаёт входящего перенаправления.</string>
     <string name="diag_test">Входящий SSH нужно проверить из другой сети.</string>
+    <string name="open_controls">Открыть управление</string>
+    <string name="listener_failed">Не удалось запустить SSH</string>
+    <string name="ssh_exited">SSH остановлен. Включите туннель для повторного запуска</string>
+    <string name="discovery_error">Поиск ADB недоступен: %1$s</string>
 </resources>

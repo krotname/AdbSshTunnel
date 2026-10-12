@@ -1137,6 +1137,7 @@ static int watch_loop(int dir) {
             }
             (void)flock(lock, LOCK_UN);
         }
+        if (stopping) break;
         struct pollfd f = {netlink, POLLIN, 0};
         int result = poll(&f, 1, (int)(WATCH_INTERVAL * 1000));
         changed = result > 0;
@@ -1163,12 +1164,16 @@ static bool start_watch(int dir) {
             fstatat(dir, "root-controller", &installed, AT_SYMLINK_NOFOLLOW)) return false;
         if (running.st_dev == installed.st_dev && running.st_ino == installed.st_ino && !strcmp(version, RC_VERSION)) return true;
         /* The exact verified old executable retains its guard during handover. */
-        if (kill((pid_t)pid, SIGHUP)) return false;
+        int mutation_lock = open_lock(dir, "controller.lock", false);
+        if (mutation_lock < 0) return false;
+        if (!lock_wait(mutation_lock)) { close(mutation_lock); return false; }
+        if (kill((pid_t)pid, SIGHUP)) { close(mutation_lock); return false; }
         int old_lock = open_lock(dir, "watch.lock", false);
-        if (old_lock < 0) return false;
+        if (old_lock < 0) { close(mutation_lock); return false; }
         bool exited = lock_wait(old_lock);
         if (exited) (void)flock(old_lock, LOCK_UN);
         close(old_lock);
+        (void)flock(mutation_lock, LOCK_UN); close(mutation_lock);
         if (!exited) return false;
     }
     pid_t child = fork();

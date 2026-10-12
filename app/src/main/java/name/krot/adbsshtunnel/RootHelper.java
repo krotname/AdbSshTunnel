@@ -1,7 +1,9 @@
 package name.krot.adbsshtunnel;
 import java.io.*;
 import android.content.Context;
+import android.content.Intent;
 import android.os.Build;
+import com.hardbacknutter.sshd.SshdService;
 import java.nio.charset.StandardCharsets;
 import java.util.concurrent.TimeUnit;
 
@@ -18,7 +20,9 @@ public final class RootHelper {
             run(CONTROLLER, Operation.CHECK, null);
             RootSettings.save(context, policy);
             RootMaintenanceJob.schedule(context);
-            return result + "\n" + status();
+            String state = result + "\n" + status();
+            notifySsh(context);
+            return state;
         } finally {
             if (!binary.delete() && binary.exists()) binary.deleteOnExit();
         }
@@ -26,11 +30,18 @@ public final class RootHelper {
     public static synchronized String apply(Context context, RootPolicy policy) throws IOException, InterruptedException {
         run(CONTROLLER, Operation.APPLY, policy.encode());
         RootSettings.save(context, policy);
-        return status();
+        String state = status();
+        notifySsh(context);
+        return state;
     }
     public static String status() throws IOException, InterruptedException { return run(CONTROLLER, Operation.STATUS, null); }
     public static synchronized void maintain(Context context) throws IOException, InterruptedException {
         run(CONTROLLER, Operation.APPLY, RootSettings.read(context).encode());
+        notifySsh(context);
+    }
+    private static void notifySsh(Context context) {
+        if (Settings.enabled(context) && Settings.prefs(context).getBoolean("root_mode", false))
+            context.startForegroundService(new Intent(context, SshdService.class).putExtra("root_guard_ready", true));
     }
     public static void verifyGuard() throws IOException, InterruptedException { run(CONTROLLER, Operation.CHECK, null); }
     private static File extract(Context context) throws IOException {

@@ -4,12 +4,12 @@
 |---|---|
 | Репозиторий | `krotname/AdbSshTunnel`, public, main |
 | Package | `name.krot.adbsshtunnel` |
-| Версия | `app/build.gradle`: 1.0.0 / 1 |
+| Версия | `app/build.gradle`: 1.1.0 / 2 |
 | APK | Один APK с arm64-v8a и x86_64 |
 | Сборка | Red / Linux, изолированный непривилегированный ARC job с постоянным кэшем; Windows-сборки только White |
 | Toolchain | SDK 36 / JDK 21 / Java 17 / AGP 8.10.1 / Gradle 8.11.1 |
 | Native | Sshd4a `897f9064a7279bff89538ec87729c43888f3b83d`, NDK 27.2.12479018, CMake 3.22.1 |
-| Проверки | testReleaseUnitTest, lintRelease, assembleRelease, native restrictions, signature, devices |
+| Проверки | testReleaseUnitTest, lintRelease, assembleRelease, native restrictions, root-controller host tests, signature, devices |
 | Подпись | Один постоянный RSA release key, PKCS12 в Vaultwarden |
 | Сертификат SHA-256 | `dc2e82bcffeb5bed6cdc2f0a6db12368a9437bd307deb79b7730f58dd523fee0` |
 | Канал выпуска | GitHub Release; магазины пока не подключены |
@@ -21,7 +21,7 @@
 
 Тестовый Pixel — стенд разработки; все испытания выполняются на нём.
 До установки на рабочий Fold обязательны положительные и отрицательные
-SSH-сценарии, root разрешён/запрещён, отказ помощника, Wireless Debugging и смена
+SSH-сценарии, root разрешён/запрещён, отказ controller и firewall, Wireless Debugging и смена
 его порта, плитка и интерфейс. На Pixel также проверяются независимость
 WireGuard/SSH, четыре реальные перезагрузки, сон/смена сети и три сопоставимых
 интервала батареи по 30 минут без зарядки. Старые результаты другого APK

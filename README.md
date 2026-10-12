@@ -3,8 +3,7 @@
 An Android SSH tunnel restricted to this phone’s local ADB. Key-only SSH,
 no shell, PTY, file transfer, agent/X11 or reverse forwarding.
 
-Package: `name.krot.adbsshtunnel`. Initial release candidate: `1.0.0` (1).
-This repository is in development; device acceptance and a signed release are pending.
+Package: `name.krot.adbsshtunnel`. Version: `1.1.0` (2). See the release profile and device acceptance before deployment.
 
 ## Without root
 
@@ -48,32 +47,13 @@ See [acceptance scenarios](docs/network-policy-acceptance.md).
 
 ## With root
 
-Install `helper/helper.sh` as `/data/adb/adb-ssh-tunnel/helper.sh`, root-owned,
-mode 700 through a trusted USB connection. The helper applies its own protection
-before enabling ADB port 5555. The SSH service itself is never elevated.
-An existing PhoneDebug guard retains responsibility for its trusted LAN policy.
-Do not remove or overwrite other applications’ firewall rules.
+On the ADB tab, install the APK's native root controller and select persistent protected ADB. The controller lives in a root-owned directory and receives only fixed operations and a validated policy. SSH stays under the app UID.
 
-For persistence across reboot on Magisk, install the repository's boot scripts
-through the same trusted USB connection:
+Persistent ADB is independent of the SSH switch and can be disabled explicitly. Its own trust settings contain a Wi-Fi SSID prefix, an exact personal hotspot SSID and a WireGuard interface. Empty settings permit loopback only; unknown Wi-Fi and mobile direct ADB remain closed. SSH retains separate allowlists and blocklists. USB debugging and authorization keys are preserved.
 
-| Source | Destination |
-|---|---|
-| `helper/boot-guard.sh` | `/data/adb/post-fs-data.d/adb-ssh-tunnel-guard.sh` |
-| `helper/boot-enable.sh` | `/data/adb/service.d/adb-ssh-tunnel-enable.sh` |
+One minimal post-fs-data hook applies protection before Android finishes booting and starts the controller. Netlink events and bounded checks update only AST_ADB_IN / AST_ADB_OUT in both firewall families, including dynamic Wireless Debugging ports. TCP ADB is disabled if protection fails. Healthy adbd is not restarted. A separate periodic Android job can restore a failed watcher even when SSH is off.
 
-Both scripts must be owned by root with mode 700. Check existing files before
-installing; do not overwrite another setup. The early script establishes the
-guard before a persisted TCP ADB listener can start. The late script enables
-root ADB only after that guard succeeds. Without these boot hooks, runtime
-firewall rules disappear on reboot and the app refuses unguarded root ADB.
-If an owner-managed PhoneDebug guard is present, its own boot setup must restore
-its rules before the helper can accept them.
-
-The boot scripts enable root ADB independently of the SSH toggle. Install them
-only when persistent root ADB is intended. After reboot, verify `helper.sh check`
-and a key-authenticated SSH/ADB connection on an allowed physical network.
-Turning off the SSH tunnel alone does not disable the system's root ADB listener.
+Use the verified migration procedure in [root-controller acceptance](docs/root-controller-acceptance.md) when replacing the legacy helper or PhoneDebug watchdog. Retire old chains only after the new guard passes. AdAway remains independent with its existing recovery budget and 15-minute checks. Other root modules and firewall rules remain outside this migration.
 
 Incoming mobile connections require a routable public IPv4 and operator support;
 an interface address or open TCP socket alone does not establish reachability.

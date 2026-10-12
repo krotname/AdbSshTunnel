@@ -52,7 +52,14 @@ public final class NetworkDiagnostics {
     }
     static boolean isPublicIpv4(InetAddress address) {
         if (!(address instanceof Inet4Address)) return false;
-        int first = address.getAddress()[0] & 255;
+        byte[] bytes = address.getAddress();
+        int first = bytes[0] & 255, second = bytes[1] & 255;
+        int third = bytes[2] & 255, fourth = bytes[3] & 255;
+        // IANA IPv4 Special-Purpose Address Registry: retain globally reachable exceptions.
+        if (first == 192 && second == 0 && third == 0) return fourth == 9 || fourth == 10;
+        if (first == 192 && ((second == 0 && third == 2) || (second == 88 && third == 99))) return false;
+        if (first == 198 && (second == 18 || second == 19 || (second == 51 && third == 100))) return false;
+        if (first == 203 && second == 0 && third == 113) return false;
         return first != 0 && first < 224 && !address.isLoopbackAddress()
             && !address.isSiteLocalAddress() && !address.isLinkLocalAddress()
             && !carrierNat(address);

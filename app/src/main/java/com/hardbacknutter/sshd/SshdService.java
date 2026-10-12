@@ -75,6 +75,13 @@ public final class SshdService extends Service {
     }
     @Override public int onStartCommand(Intent intent, int flags, int startId) {
         if (!Settings.enabled(this)) { stopSelf(); return START_NOT_STICKY; }
+        // A first migration can start SSH before its controller exists. Retry
+        // that pending guard check after setup; keep a healthy server intact.
+        if (intent != null && intent.getBooleanExtra("root_guard_ready", false)
+            && networkMonitor != null && Settings.prefs(this).getBoolean("root_mode", false)) {
+            if (desiredPort == 0) checkRootGuard();
+            return START_STICKY;
+        }
         cancelRootCheck();
         stopNative();
         int discoveryToken = ++discoveryGeneration;

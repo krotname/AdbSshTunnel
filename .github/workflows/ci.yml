@@ -34,6 +34,9 @@ jobs:
         run: |
           cc -std=c11 -Wall -Wextra -Werror tools/test-tunnel-parent.c -o "$RUNNER_TEMP/tunnel-parent-test"
           "$RUNNER_TEMP/tunnel-parent-test"
+          cc -std=c11 -Wall -Wextra -Werror tools/test-root-controller.c -o "$RUNNER_TEMP/root-controller-test"
+          "$RUNNER_TEMP/root-controller-test"
+          cc -std=c11 -Wall -Wextra -Werror app/src/main/cpp/root-controller.c -o "$RUNNER_TEMP/root-controller-compile-check"
       - name: Configure toolchain paths
         shell: bash
         run: |

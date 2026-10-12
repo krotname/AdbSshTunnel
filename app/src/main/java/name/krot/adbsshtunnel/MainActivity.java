@@ -30,8 +30,10 @@ public final class MainActivity extends AppCompatActivity {
     private int selectedTab = TUNNEL;
     private LinearLayout page, controls;
     private boolean controlsInDialog;
-    private TextView status, wifiSummary, mobileSummary;
+    private TextView status, wifiSummary, mobileSummary, rootStatus;
     private SwitchMaterial toggle;
+    private SwitchMaterial persistentAdb;
+    private boolean rootRequest;
     private NetworkMonitor networkMonitor;
     private NetworkPolicyView editor;
     private List<NetworkMonitor.Entry> networks = Collections.emptyList();
@@ -137,6 +139,7 @@ public final class MainActivity extends AppCompatActivity {
     private void showPage() {
         controlsInDialog = false;
         page.removeAllViews(); status = null; toggle = null; wifiSummary = null; mobileSummary = null;
+        rootStatus = null; persistentAdb = null;
         switch (selectedTab) {
             case NETWORKS: networksPage(); break;
             case ADB: adbPage(); break;
@@ -215,13 +218,19 @@ public final class MainActivity extends AppCompatActivity {
             name.krot.adbsshtunnel.Settings.prefs(this).edit().putBoolean("root_mode", selected).commit();
             if (name.krot.adbsshtunnel.Settings.enabled(this)) SshdService.select(this, true);
         });
-        button(root, R.string.root_helper, () -> new Thread(() -> {
-            String result;
-            try { result = RootHelper.configure(); }
-            catch (Exception e) { result = e.getMessage(); }
-            final String value = result;
-            runOnUiThread(() -> { if (!isFinishing() && !isDestroyed()) message(value); });
-        }, "root-helper").start());
+        persistentAdb = new SwitchMaterial(this);
+        persistentAdb.setText(R.string.persistent_adb);
+        persistentAdb.setChecked(RootSettings.read(this).enabled);
+        root.addView(persistentAdb);
+        persistentAdb.setOnCheckedChangeListener((v, enabled) -> {
+            if (enabled == RootSettings.read(this).enabled || rootRequest) return;
+            configureRoot(RootSettings.read(this).withEnabled(enabled));
+        });
+        rootStatus = text(root, s(R.string.root_unconfigured), 14);
+        rootStatus.setMaxLines(3); rootStatus.setEllipsize(android.text.TextUtils.TruncateAt.END);
+        button(root, R.string.root_helper, () -> configureRoot(RootSettings.read(this)));
+        button(root, R.string.direct_adb_rules, this::editDirectAdb);
+        button(root, R.string.root_status, this::showRootStatus);
         button(root, R.string.connection_details, () -> detail(R.string.root_adb, s(R.string.root_help)));
         text(wireless, s(R.string.wireless_title), 20);
         text(wireless, s(R.string.wireless_short), 15);
@@ -230,6 +239,72 @@ public final class MainActivity extends AppCompatActivity {
             catch (ActivityNotFoundException e) { startActivity(new Intent(Settings.ACTION_SETTINGS)); }
         });
         button(wireless, R.string.pairing_help, () -> detail(R.string.wireless_title, s(R.string.wireless_help)));
+    }
+    private void configureRoot(RootPolicy policy) {
+        if (rootRequest) return;
+        rootRequest = true;
+        if (persistentAdb != null) persistentAdb.setEnabled(false);
+        if (rootStatus != null) rootStatus.setText(R.string.checking_root);
+        new Thread(() -> {
+            String result; boolean success;
+            try {
+                result = RootHelper.configure(this, policy);
+                name.krot.adbsshtunnel.Settings.prefs(this).edit().remove("root_controller_error").apply();
+                success = true;
+            } catch (Exception e) {
+                result = e.getMessage(); success = false;
+                name.krot.adbsshtunnel.Settings.prefs(this).edit().putString("root_controller_error", result).apply();
+            }
+            final String value = result; final boolean configured = success;
+            runOnUiThread(() -> {
+                rootRequest = false;
+                if (isFinishing() || isDestroyed()) return;
+                if (persistentAdb != null) {
+                    persistentAdb.setChecked(RootSettings.read(this).enabled);
+                    persistentAdb.setEnabled(true);
+                }
+                if (rootStatus != null) rootStatus.setText(configured ? s(R.string.root_guard_verified) : value);
+                detail(R.string.root_status, value);
+            });
+        }, "root-controller").start();
+    }
+    private void showRootStatus() {
+        if (!RootSettings.configured(this)) { detail(R.string.root_status, s(R.string.root_unconfigured)); return; }
+        new Thread(() -> {
+            String result;
+            try { result = RootHelper.status(); }
+            catch (Exception e) { result = e.getMessage(); }
+            final String value = result;
+            runOnUiThread(() -> { if (!isFinishing() && !isDestroyed()) detail(R.string.root_status, value); });
+        }, "root-status").start();
+    }
+    private TextInputEditText rootField(LinearLayout body, int hint, String value) {
+        TextInputLayout layout = new TextInputLayout(this); layout.setHint(s(hint));
+        TextInputEditText input = new TextInputEditText(layout.getContext());
+        input.setSingleLine(true); input.setText(value); layout.addView(input); body.addView(layout);
+        return input;
+    }
+    private void editDirectAdb() {
+        RootPolicy policy = RootSettings.read(this);
+        LinearLayout body = new LinearLayout(this); body.setOrientation(LinearLayout.VERTICAL);
+        body.setPadding(dp(20), dp(8), dp(20), 0);
+        text(body, s(R.string.direct_adb_help), 14);
+        TextInputEditText wifi = rootField(body, R.string.adb_wifi_prefix, policy.wifiPrefix);
+        TextInputEditText hotspot = rootField(body, R.string.adb_hotspot_ssid, policy.hotspotSsid);
+        TextInputEditText wireguard = rootField(body, R.string.adb_wireguard_iface, policy.wireguardInterface);
+        ScrollView scroll = new ScrollView(this); scroll.addView(body);
+        androidx.appcompat.app.AlertDialog dialog = new androidx.appcompat.app.AlertDialog.Builder(this)
+            .setTitle(R.string.direct_adb_rules).setView(scroll).setNegativeButton(R.string.cancel, null)
+            .setPositiveButton(R.string.save, null).create();
+        dialog.setOnShowListener(ignored -> dialog.getButton(android.content.DialogInterface.BUTTON_POSITIVE).setOnClickListener(v -> {
+            try {
+                RootPolicy updated = new RootPolicy(policy.enabled, String.valueOf(wifi.getText()),
+                    String.valueOf(hotspot.getText()), String.valueOf(wireguard.getText()));
+                if (rootRequest) return;
+                dialog.dismiss(); configureRoot(updated);
+            } catch (IllegalArgumentException e) { message(e.getMessage()); }
+        }));
+        dialog.show();
     }
     private void settingsPage() {
         LinearLayout row = groups(), preferences = card(row), security = card(row);
@@ -382,6 +457,11 @@ public final class MainActivity extends AppCompatActivity {
         if (toggle != null) toggle.setChecked(name.krot.adbsshtunnel.Settings.enabled(this));
         if (wifiSummary != null) wifiSummary.setText(summary(NetworkSettings.Kind.WIFI));
         if (mobileSummary != null) mobileSummary.setText(summary(NetworkSettings.Kind.MOBILE));
+        if (rootStatus != null && !rootRequest) {
+            String error = name.krot.adbsshtunnel.Settings.prefs(this).getString("root_controller_error", "");
+            rootStatus.setText(!error.isEmpty() ? error : s(RootSettings.configured(this)
+                ? R.string.root_configured : R.string.root_unconfigured));
+        }
         page.post(this::fitPage);
     }
     @Override protected void onStart() {

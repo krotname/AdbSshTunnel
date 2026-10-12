@@ -54,6 +54,27 @@ before enabling ADB port 5555. The SSH service itself is never elevated.
 An existing PhoneDebug guard retains responsibility for its trusted LAN policy.
 Do not remove or overwrite other applications’ firewall rules.
 
+For persistence across reboot on Magisk, install the repository's boot scripts
+through the same trusted USB connection:
+
+| Source | Destination |
+|---|---|
+| `helper/boot-guard.sh` | `/data/adb/post-fs-data.d/adb-ssh-tunnel-guard.sh` |
+| `helper/boot-enable.sh` | `/data/adb/service.d/adb-ssh-tunnel-enable.sh` |
+
+Both scripts must be owned by root with mode 700. Check existing files before
+installing; do not overwrite another setup. The early script establishes the
+guard before a persisted TCP ADB listener can start. The late script enables
+root ADB only after that guard succeeds. Without these boot hooks, runtime
+firewall rules disappear on reboot and the app refuses unguarded root ADB.
+If an owner-managed PhoneDebug guard is present, its own boot setup must restore
+its rules before the helper can accept them.
+
+The boot scripts enable root ADB independently of the SSH toggle. Install them
+only when persistent root ADB is intended. After reboot, verify `helper.sh check`
+and a key-authenticated SSH/ADB connection on an allowed physical network.
+Turning off the SSH tunnel alone does not disable the system's root ADB listener.
+
 Incoming mobile connections require a routable public IPv4 and operator support;
 an interface address or open TCP socket alone does not establish reachability.
 

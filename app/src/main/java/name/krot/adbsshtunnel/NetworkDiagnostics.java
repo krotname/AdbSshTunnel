@@ -33,8 +33,7 @@ public final class NetworkDiagnostics {
         } finally { connection.disconnect(); }
         if (!external.matches("[0-9]{1,3}(\\.[0-9]{1,3}){3}")) throw new IOException("Invalid public IPv4 response");
         InetAddress publicAddress = InetAddress.getByName(external);
-        if (!(publicAddress instanceof Inet4Address) || publicAddress.isAnyLocalAddress() || publicAddress.isLoopbackAddress()
-                || publicAddress.isSiteLocalAddress() || carrierNat(publicAddress)) throw new IOException("Public IPv4 service returned a non-public address");
+        if (!isPublicIpv4(publicAddress)) throw new IOException("Public IPv4 service returned a non-public address");
         if (!network.equals(manager.getActiveNetwork())) throw new IOException("Network changed; refresh again");
         StringBuilder result = new StringBuilder("External IPv4: ").append(external).append("\nActive interface IPv4: ");
         for (Inet4Address address : local) result.append(address.getHostAddress()).append(' ');
@@ -50,6 +49,20 @@ public final class NetworkDiagnostics {
             result.append("The external address differs from Wi-Fi. Incoming WAN access may require router port forwarding; this app does not change the router.");
         else result.append("External and interface addresses differ. NAT is present; a public address alone does not provide an incoming mapping.");
         return result.append("\nIncoming SSH reachability must be tested from another network.").toString();
+    }
+    static boolean isPublicIpv4(InetAddress address) {
+        if (!(address instanceof Inet4Address)) return false;
+        byte[] bytes = address.getAddress();
+        int first = bytes[0] & 255, second = bytes[1] & 255;
+        int third = bytes[2] & 255, fourth = bytes[3] & 255;
+        // IANA IPv4 Special-Purpose Address Registry: retain globally reachable exceptions.
+        if (first == 192 && second == 0 && third == 0) return fourth == 9 || fourth == 10;
+        if (first == 192 && ((second == 0 && third == 2) || (second == 88 && third == 99))) return false;
+        if (first == 198 && (second == 18 || second == 19 || (second == 51 && third == 100))) return false;
+        if (first == 203 && second == 0 && third == 113) return false;
+        return first != 0 && first < 224 && !address.isLoopbackAddress()
+            && !address.isSiteLocalAddress() && !address.isLinkLocalAddress()
+            && !carrierNat(address);
     }
     private static boolean carrierNat(InetAddress address) {
         byte[] bytes = address.getAddress();

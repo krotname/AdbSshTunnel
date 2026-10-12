@@ -264,7 +264,6 @@ public final class MainActivity extends AppCompatActivity {
                     persistentAdb.setEnabled(true);
                 }
                 if (rootStatus != null) rootStatus.setText(configured ? s(R.string.root_guard_verified) : value);
-                if (configured && name.krot.adbsshtunnel.Settings.enabled(this)) SshdService.select(this, true);
                 detail(R.string.root_status, value);
             });
         }, "root-controller").start();

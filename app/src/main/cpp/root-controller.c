@@ -532,6 +532,10 @@ static enum adb_action adb_action(bool enabled, bool listener, const char *servi
     return !listener && !strcmp(service, "-1") && !strcmp(persist, "-1") ? ADB_KEEP : ADB_RESTART;
 }
 
+static bool adb_restart_ready(bool enabled, bool boot_completed, bool functionfs_ready) {
+    return !enabled || boot_completed || functionfs_ready;
+}
+
 struct backoff { uint64_t next; unsigned int delay; };
 static bool restart_due(struct backoff *b, uint64_t now, bool healthy) {
     if (healthy) { b->delay = 0; b->next = 0; return false; }
@@ -577,6 +581,7 @@ static bool parse_tcp_record(const char *line, struct tcp_record *r) {
 #include <sys/prctl.h>
 #include <sys/socket.h>
 #include <sys/stat.h>
+#include <sys/statfs.h>
 #include <sys/types.h>
 #include <sys/wait.h>
 #include <time.h>
@@ -1053,6 +1058,18 @@ static int reconcile(const struct policy *p, struct backoff *backoff) {
     if (!collect_ports(&ports, &any) || !property_get("service.adb.tcp.port", service, sizeof(service)) ||
         !property_get("persist.adb.tcp.port", persist, sizeof(persist))) return RC_ADB;
     bool healthy = adb_action(p->enabled, ports.listener, service, persist) == ADB_KEEP;
+    /* post-fs-data precedes the vendor early-boot FunctionFS mount. Starting
+     * adbd there gives it TCP only; init's later start cannot reopen USB on an
+     * already running daemon. Keep the early guard, but defer that first
+     * enabled restart until FunctionFS exists. Devices without FunctionFS may
+     * start after Android boot. Disabling TCP never waits for USB readiness.
+     */
+    if (!healthy && p->enabled) {
+        struct statfs usb_fs;
+        bool functionfs_ready = !statfs("/dev/usb-ffs/adb", &usb_fs) &&
+                                (unsigned long)usb_fs.f_type == 0x0a647361UL;
+        if (!adb_restart_ready(p->enabled, binder_ready(), functionfs_ready)) return RC_ADB;
+    }
     bool restart = backoff ? restart_due(backoff, clock_ms() / 1000, healthy) : !healthy;
     if (healthy || !restart) return RC_OK;
     const char *value = p->enabled ? "5555" : "-1";

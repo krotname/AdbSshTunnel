@@ -239,6 +239,10 @@ static void lifecycle_tests(void) {
     CHECK(adb_action(false, true, "-1", "-1") == ADB_RESTART);
     CHECK(adb_action(false, false, "5555", "-1") == ADB_RESTART);
     CHECK(adb_action(false, false, "-1", "5555") == ADB_RESTART);
+    CHECK(!adb_restart_ready(true, false, false));
+    CHECK(adb_restart_ready(true, false, true));
+    CHECK(adb_restart_ready(true, true, false));
+    CHECK(adb_restart_ready(false, false, false));
     struct backoff b = {0};
     CHECK(!restart_due(&b, 100, true) && b.next == 0 && b.delay == 0);
     CHECK(restart_due(&b, 100, false) && b.delay == 10 && b.next == 110);

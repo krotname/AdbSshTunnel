@@ -238,6 +238,44 @@ struct identity {
     bool active, has_ssid, invalid;
 };
 
+/* Drain diagnostic history with bounded memory; keep complete manager blocks.
+ * A failed/truncated capture never authorizes a network exception.
+ */
+struct dump_filter {
+    struct text output;
+    char line[2048];
+    size_t used, received;
+    bool section, oversized;
+};
+
+static bool dump_filter_line(struct dump_filter *f) {
+    f->line[f->used] = 0;
+    const char *s = f->line; while (*s == ' ') ++s;
+    bool header = !strncmp(s, "SoftApManager{", 14) ||
+        !strcmp(s, "Dump of SoftApManager") || !strncmp(s, "Dump of SoftApManager id=", 25) ||
+        !strcmp(s, "SoftApManager:") || !strncmp(s, "ClientModeManager{", 18) ||
+        !strcmp(s, "Dump of ClientModeManager") || !strcmp(s, "ClientModeManager:");
+    if (header) f->section = true;
+    if (f->section) {
+        if (f->oversized) return false;
+        append(&f->output, "%s\n", f->line);
+        if (!*s) f->section = false;
+    }
+    f->used = 0; f->oversized = false;
+    return f->output.ok;
+}
+
+static bool dump_filter_feed(struct dump_filter *f, const char *bytes, size_t n) {
+    if (n > 16u * 1024u * 1024u - f->received || memchr(bytes, 0, n)) return false;
+    f->received += n;
+    for (size_t i = 0; i < n; ++i) {
+        if (bytes[i] == '\n') { if (!dump_filter_line(f)) return false; }
+        else if (f->used < sizeof(f->line) - 1) f->line[f->used++] = bytes[i];
+        else f->oversized = true;
+    }
+    return true;
+}
+
 static bool identity_matches(const struct identity *i, const struct policy *p, bool ap) {
     size_t n = ap ? p->hotspot_len : p->wifi_len;
     const unsigned char *s = ap ? p->hotspot : p->wifi;
@@ -598,7 +636,8 @@ static bool write_all(int fd, const void *buffer, size_t n) {
  * occur. Drain stdout/stderr while supplying input, with a single deadline.
  * Oversized/truncated diagnostics are failures, not partially trusted state.
  */
-static bool command(const char *const argv[], const char *input, char *out, size_t cap) {
+static bool command_capture(const char *const argv[], const char *input, char *out, size_t cap,
+                            bool filter_dump) {
     int in_pipe[2], out_pipe[2];
     if (!cap || pipe2(in_pipe, O_CLOEXEC)) return false;
     if (pipe2(out_pipe, O_CLOEXEC)) { close(in_pipe[0]); close(in_pipe[1]); return false; }
@@ -624,6 +663,7 @@ static bool command(const char *const argv[], const char *input, char *out, size
     uint64_t deadline = clock_ms() + IO_TIMEOUT;
     int status = 0; bool reaped = false;
     out[0] = 0;
+    struct dump_filter filter = {.output = {out, 0, cap, true}};
     while (ok && (!reaped || read_fd >= 0)) {
         if (write_fd >= 0 && sent == length) { close(write_fd); write_fd = -1; }
         if (clock_ms() >= deadline || stopping) { ok = false; break; }
@@ -634,8 +674,12 @@ static bool command(const char *const argv[], const char *input, char *out, size
             char buf[4096];
             ssize_t n = read(read_fd, buf, sizeof(buf));
             if (n > 0) {
-                if ((size_t)n >= cap - used || memchr(buf, 0, (size_t)n)) { ok = false; break; }
-                memcpy(out + used, buf, (size_t)n); used += (size_t)n; out[used] = 0;
+                if (filter_dump) {
+                    if (!dump_filter_feed(&filter, buf, (size_t)n)) { ok = false; break; }
+                } else {
+                    if ((size_t)n >= cap - used || memchr(buf, 0, (size_t)n)) { ok = false; break; }
+                    memcpy(out + used, buf, (size_t)n); used += (size_t)n; out[used] = 0;
+                }
             } else if (!n) { close(read_fd); read_fd = -1; }
             else if (errno != EAGAIN && errno != EINTR) ok = false;
         }
@@ -656,7 +700,12 @@ static bool command(const char *const argv[], const char *input, char *out, size
     if (read_fd >= 0) close(read_fd);
     if (!ok) { (void)kill(-child, SIGKILL); (void)kill(child, SIGKILL); }
     if (!reaped) while (waitpid(child, &status, 0) < 0 && errno == EINTR) { }
+    if (ok && filter_dump && (filter.used || filter.oversized)) ok = dump_filter_line(&filter);
     return ok && sent == length && WIFEXITED(status) && WEXITSTATUS(status) == 0;
+}
+
+static bool command(const char *const argv[], const char *input, char *out, size_t cap) {
+    return command_capture(argv, input, out, cap, false);
 }
 
 static bool property_get(const char *name, char *out, size_t cap) {
@@ -910,7 +959,7 @@ static void current_ifaces(const struct policy *p, bool binder, struct interface
     const char *cmd[] = {"/system/bin/cmd", "wifi", "status", NULL};
     const char *dumpsys[] = {"/system/bin/dumpsys", "wifi", NULL};
     bool status_ok = command(cmd, NULL, status, TEXT_MAX);
-    bool dump_ok = command(dumpsys, NULL, dump, TEXT_MAX);
+    bool dump_ok = command_capture(dumpsys, NULL, dump, TEXT_MAX, true);
     /* A failed query is unknown, even if it returned plausible partial data. */
     trusted_ifaces(p, status_ok ? status : "", dump_ok ? dump : "", a);
     free(status); free(dump);

@@ -266,8 +266,28 @@ static void lifecycle_tests(void) {
     CHECK(!parse_tcp_record("0: 00000000:10000 x 0A x x x 2000 x 123", &r));
 }
 
+static void dump_tests(void) {
+    char output[4096] = {0}, noise[4096]; memset(noise, 'x', sizeof(noise));
+    noise[sizeof(noise) - 1] = '\n';
+    struct dump_filter f = {.output = {output, 0, sizeof(output), true}};
+    for (unsigned int i = 0; i < 1200; ++i) CHECK(dump_filter_feed(&f, noise, sizeof(noise)));
+    const char ap[] = "Dump of SoftApManager id=2\ncurrent StateMachine mode: StartedState\n"
+        "mRole: ROLE_SOFTAP_TETHERED\nmApInterfaceName: swlan0\nmIfaceIsUp: true\n"
+        "mCurrentSoftApConfiguration: ssid = \"Pixel\"\nSecurityType = 3\nmCurrentSoftApCapability:\n\n";
+    for (size_t i = 0; i < sizeof(ap) - 1; ++i) CHECK(dump_filter_feed(&f, ap + i, 1));
+    CHECK(!strcmp(output, ap));
+    struct policy p; struct interfaces a; CHECK(parse_policy(policy_text, strlen(policy_text), &p));
+    trusted_ifaces(&p, "", output, &a); CHECK(has_iface(&a, "swlan0"));
+    CHECK(dump_filter_feed(&f, ap, sizeof(ap) - 1));
+    trusted_ifaces(&p, "", output, &a); CHECK(!has_iface(&a, "swlan0"));
+    CHECK(!dump_filter_feed(&f, "\0", 1));
+    struct dump_filter truncated = {.output = {output, 0, sizeof(output), true}};
+    CHECK(dump_filter_feed(&truncated, "SoftApManager:\n", strlen("SoftApManager:\n")));
+    CHECK(!dump_filter_feed(&truncated, noise, sizeof(noise)));
+}
+
 int main(void) {
-    parser_tests(); identity_tests(); firewall_tests(); lifecycle_tests();
+    parser_tests(); identity_tests(); firewall_tests(); lifecycle_tests(); dump_tests();
     if (failures) { fprintf(stderr, "%d failed checks\n", failures); return 1; }
     puts("Policy, identity binding, firewall isolation, TLS output restriction and lifecycle checks passed");
     return 0;

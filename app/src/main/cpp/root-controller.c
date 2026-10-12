@@ -536,6 +536,7 @@ static bool parse_tcp_record(const char *line, struct tcp_record *r) {
 #include <poll.h>
 #include <signal.h>
 #include <sys/file.h>
+#include <sys/prctl.h>
 #include <sys/socket.h>
 #include <sys/stat.h>
 #include <sys/types.h>
@@ -1106,12 +1107,7 @@ static int route_socket(void) {
     return fd;
 }
 
-static int watch_loop(int dir) {
-    int watch_lock = open_lock(dir, "watch.lock", true);
-    if (watch_lock < 0) return RC_STORAGE;
-    if (flock(watch_lock, LOCK_EX | LOCK_NB)) {
-        bool busy = errno == EWOULDBLOCK; close(watch_lock); return busy ? RC_OK : RC_LOCK;
-    }
+static int watch_loop(int dir, int watch_lock) {
     int lock = open_lock(dir, "controller.lock", true), netlink = route_socket();
     if (lock < 0 || netlink < 0 || !watcher_record(dir)) {
         if (lock >= 0 && lock_wait(lock)) { (void)guard_failed(); (void)flock(lock, LOCK_UN); }
@@ -1152,7 +1148,51 @@ static int watch_loop(int dir) {
     if (!upgrading && lock_wait(lock)) { (void)shutdown_tcp(); (void)flock(lock, LOCK_UN); }
     stopping = interrupted;
     close(netlink); close(lock); close(watch_lock);
-    return stopping ? RC_OK : RC_WATCH;
+    return upgrading ? 9 : stopping ? RC_OK : RC_WATCH;
+}
+
+/* Keep failure cleanup outside the event worker. SIGKILL or a crash cannot
+ * leave its last Wi-Fi exception trusted indefinitely. Losing this supervisor
+ * delivers SIGTERM to the worker, whose normal exit also closes TCP ADB. Both
+ * processes use this APK-owned executable and expose no additional operation.
+ */
+static int supervised_watch(int dir) {
+    int watch_lock = open_lock(dir, "watch.lock", true);
+    if (watch_lock < 0) return RC_STORAGE;
+    if (flock(watch_lock, LOCK_EX | LOCK_NB)) {
+        bool busy = errno == EWOULDBLOCK; close(watch_lock); return busy ? RC_OK : RC_LOCK;
+    }
+    pid_t parent = getpid(), worker = fork();
+    if (worker < 0) { close(watch_lock); return RC_WATCH; }
+    if (!worker) {
+        if (prctl(PR_SET_PDEATHSIG, SIGTERM) || getppid() != parent) _exit(RC_WATCH);
+        int result = watch_loop(dir, watch_lock);
+        close(dir); _exit(result);
+    }
+    int status = 0;
+    pid_t waited;
+    do {
+        waited = waitpid(worker, &status, 0);
+        if (waited < 0 && errno == EINTR && stopping)
+            (void)kill(worker, upgrading ? SIGHUP : SIGTERM);
+    } while (waited < 0 && errno == EINTR);
+    bool handover = waited == worker && WIFEXITED(status) && WEXITSTATUS(status) == 9;
+    bool clean = waited == worker && WIFEXITED(status) && WEXITSTATUS(status) == RC_OK;
+    if (!handover) {
+        stopping = 0;
+        int lock = open_lock(dir, "controller.lock", false);
+        if (lock >= 0) {
+            if (lock_wait(lock)) {
+                struct policy p;
+                if (load_policy(dir, &p)) (void)guard_policy(&p, false, true);
+                (void)shutdown_tcp();
+                (void)flock(lock, LOCK_UN);
+            }
+            close(lock);
+        }
+    }
+    close(watch_lock);
+    return handover || clean ? RC_OK : RC_WATCH;
 }
 
 static bool start_watch(int dir) {
@@ -1233,7 +1273,7 @@ int main(int argc, char **argv) {
         if (!check && !status) (void)shutdown_tcp();
         return RC_STORAGE;
     }
-    if (watch) { int result = watch_loop(dir); close(dir); return result; }
+    if (watch) { int result = supervised_watch(dir); close(dir); return result; }
     if (check || status) {
         int read_lock = open_lock(dir, "controller.lock", false);
         if (read_lock < 0) { close(dir); return RC_STORAGE; }

@@ -224,7 +224,7 @@ static bool completed_info(const char *line) {
         if (!rest || strncmp(rest + 1, ", BSSID:", 8)) return false;
         ++rest;
     } else rest = strstr(ssid, ", BSSID:");
-    if (!rest || strchr(rest, '"')) return false;
+    if (!rest) return false;
     const char *state = strstr(rest, ", Supplicant state: ");
     if (!state || strstr(state + 1, ", Supplicant state: ")) return false;
     state += strlen(", Supplicant state: ");

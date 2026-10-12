@@ -94,7 +94,7 @@ static void identity_tests(void) {
     struct policy p; CHECK(parse_policy(policy_text, strlen(policy_text), &p));
     struct interfaces a;
     const char samsung_status[] = "Wifi is enabled\n==== ClientModeManager instance: ConcreteClientModeManager{id=11833 iface=wlan0 role=ROLE_CLIENT_PRIMARY} ====\n"
-        "Wifi is connected to \"Home-5G\"\nWifiInfo: SSID: \"Home-5G\", BSSID: x, Supplicant state: COMPLETED, RSSI: -40\n";
+        "Wifi is connected to \"Home-5G\"\nWifiInfo: SSID: \"Home-5G\", BSSID: x, Supplicant state: COMPLETED, RSSI: -40, Requesting package name: <none>\"Home-5G\"wpa2-pskMLO Information: <none>\n";
     trusted_ifaces(&p, samsung_status, "", &a); CHECK(has_iface(&a, "wlan0"));
     const char samsung_ap[] = "Dump of SoftApManager id=2\ncurrent StateMachine mode: StartedState\n"
         "mRole: ROLE_SOFTAP_TETHERED\nmApInterfaceName: swlan0\nmIfaceIsUp: true\n"

@@ -62,6 +62,7 @@ public final class SshdService extends Service {
             .setContentIntent(open).setOngoing(true).build();
     }
     private void publish(String text) {
+        if (text.equals(state)) return;
         state = text;
         getSystemService(NotificationManager.class).notify(19191, notification());
         TileService.requestListeningState(this, new ComponentName(this, TunnelTile.class));

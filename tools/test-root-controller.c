@@ -90,6 +90,34 @@ static const char active_dump[] =
     "SoftApManager{id=2 iface=ap0}\n"
     "mIfaceName=ap0\nmSoftApState=13\nmCurrentSoftApConfiguration: SSID: \"Pixel\"\n\n";
 
+static void maintenance_tests(void) {
+    struct policy expected, stored;
+    CHECK(parse_policy(policy_text, strlen(policy_text), &expected));
+    stored = expected;
+    CHECK(maintenance_reuses_policy(&expected, &stored, true));
+    CHECK(!maintenance_reuses_policy(&expected, &stored, false));
+    stored.enabled = false; CHECK(!maintenance_reuses_policy(&expected, &stored, true));
+    stored = expected; stored.wifi[0] = 'x'; CHECK(!maintenance_reuses_policy(&expected, &stored, true));
+    stored = expected; --stored.wifi_len; CHECK(!maintenance_reuses_policy(&expected, &stored, true));
+    stored = expected; stored.hotspot[0] = 'x'; CHECK(!maintenance_reuses_policy(&expected, &stored, true));
+    stored = expected; --stored.hotspot_len; CHECK(!maintenance_reuses_policy(&expected, &stored, true));
+    stored = expected; strcpy(stored.wg, "wg1"); CHECK(!maintenance_reuses_policy(&expected, &stored, true));
+    CHECK(wifi_dump_needed(&expected, connected_status)); /* Hotspot still needs current state. */
+    expected.hotspot_len = 0;
+    CHECK(!wifi_dump_needed(&expected, connected_status));
+    CHECK(wifi_dump_needed(&expected, connected_legacy));
+    struct interfaces full, minimal;
+    trusted_ifaces(&expected, connected_status, active_dump, &full);
+    trusted_ifaces(&expected, connected_status, "", &minimal);
+    CHECK(full.count == minimal.count && has_iface(&minimal, "wlan0"));
+    trusted_ifaces(&expected, connected_legacy, "", &minimal);
+    CHECK(!has_iface(&minimal, "wlan0")); /* Missing fallback cannot open direct ADB. */
+    CHECK(!wifi_dump_needed(&expected, "Wifi is disabled\n"));
+    CHECK(!wifi_dump_needed(&expected, ""));
+    expected.wifi[0] = 'x'; CHECK(!wifi_dump_needed(&expected, connected_legacy));
+    expected.wifi_len = 0; CHECK(!wifi_dump_needed(&expected, connected_legacy));
+}
+
 static void identity_tests(void) {
     struct policy p; CHECK(parse_policy(policy_text, strlen(policy_text), &p));
     struct interfaces a;
@@ -291,7 +319,7 @@ static void dump_tests(void) {
 }
 
 int main(void) {
-    parser_tests(); identity_tests(); firewall_tests(); lifecycle_tests(); dump_tests();
+    parser_tests(); identity_tests(); firewall_tests(); lifecycle_tests(); dump_tests(); maintenance_tests();
     if (failures) { fprintf(stderr, "%d failed checks\n", failures); return 1; }
     puts("Policy, identity binding, firewall isolation, TLS output restriction and lifecycle checks passed");
     return 0;

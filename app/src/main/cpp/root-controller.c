@@ -3,7 +3,7 @@
  * network service. Build this translation unit as a PIE and package the binary
  * as an asset; integration deliberately lives outside this file.
  *
- * CLI (exactly one argument): install/apply consume <=8192 bytes on stdin;
+ * CLI (exactly one argument): install/apply/maintain consume <=8192 bytes on stdin;
  * guard/check/enable/disable/status/boot/watch consume no policy arguments.
  * All five policy keys are mandatory, unique, order independent. Empty SSIDs
  * disable that exception. Wi-Fi is a byte-prefix match; hotspot is exact.
@@ -28,7 +28,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-#define RC_VERSION "1.1.0"
+#define RC_VERSION "1.1.1"
 #define POLICY_MAX 8192u
 #define SSID_MAX 32u
 #define IFACE_MAX 15u
@@ -48,6 +48,16 @@ struct policy {
 struct interfaces { char name[ALLOW_MAX][IFACE_MAX + 1]; size_t count; };
 struct ports { unsigned short value[PORT_MAX]; size_t count; bool listener; };
 struct text { char *data; size_t len, cap; bool ok; };
+
+static bool maintenance_reuses_policy(const struct policy *expected,
+                                     const struct policy *stored, bool current_watch) {
+    return current_watch && expected->enabled == stored->enabled &&
+        expected->wifi_len == stored->wifi_len && expected->hotspot_len == stored->hotspot_len &&
+        !memcmp(expected->wifi, stored->wifi, expected->wifi_len) &&
+        !memcmp(expected->hotspot, stored->hotspot, expected->hotspot_len) &&
+        !strcmp(expected->wg, stored->wg);
+}
+
 
 static void append(struct text *b, const char *fmt, ...) {
     if (!b->ok || b->len >= b->cap) { b->ok = false; return; }
@@ -298,14 +308,9 @@ static void identity_ssid(struct identity *i, const unsigned char *s, size_t n) 
  * Modern status with ClientModeManager{... iface=...} needs no fallback.
  * AP exception needs mSoftApState=13 AND current config within SoftApManager.
  */
-static void trusted_ifaces(const struct policy *p, const char *status, const char *dump,
-                          struct interfaces *allowed) {
-    base_ifaces(p, allowed);
-    struct identity station = {0}, block = {0};
+static struct identity wifi_station(const char *status) {
+    struct identity station = {0};
     bool wifi_enabled = false, connected = false, station_section = false;
-    bool ap_section = false, client_section = false, ap_config_next = false;
-    bool samsung_ap = false, tethered = false, iface_up = false, secured = false, ap_config = false;
-    struct identity ap_candidate = {0}; unsigned int ap_count = 0;
     char line[2048];
     const char *cursor = status;
     while (*cursor) {
@@ -332,6 +337,28 @@ static void trusted_ifaces(const struct policy *p, const char *status, const cha
         }
     }
     station.active = station.active && wifi_enabled && connected;
+    return station;
+}
+
+/* A named, completed station is authoritative; an unnamed matching station
+ * needs the live ClientMode block. Hotspot identity always needs its dump. */
+static bool wifi_dump_needed(const struct policy *p, const char *status) {
+    if (p->hotspot_len) return true;
+    struct identity station = wifi_station(status);
+    return p->wifi_len && !station.invalid && station.active && station.has_ssid &&
+        !*station.iface && station.len >= p->wifi_len &&
+        !memcmp(station.ssid, p->wifi, p->wifi_len);
+}
+
+static void trusted_ifaces(const struct policy *p, const char *status, const char *dump,
+                          struct interfaces *allowed) {
+    base_ifaces(p, allowed);
+    struct identity station = wifi_station(status), block = {0};
+    bool ap_section = false, client_section = false, ap_config_next = false;
+    bool samsung_ap = false, tethered = false, iface_up = false, secured = false, ap_config = false;
+    struct identity ap_candidate = {0}; unsigned int ap_count = 0;
+    char line[2048];
+    const char *cursor;
     if (identity_matches(&station, p, false)) (void)add_iface(allowed, station.iface);
     cursor = dump;
     for (;;) {
@@ -964,7 +991,9 @@ static void current_ifaces(const struct policy *p, bool binder, struct interface
     const char *cmd[] = {"/system/bin/cmd", "wifi", "status", NULL};
     const char *dumpsys[] = {"/system/bin/dumpsys", "wifi", NULL};
     bool status_ok = command(cmd, NULL, status, TEXT_MAX);
-    bool dump_ok = command_capture(dumpsys, NULL, dump, TEXT_MAX, true);
+    bool dump_ok = false;
+    if (wifi_dump_needed(p, status_ok ? status : ""))
+        dump_ok = command_capture(dumpsys, NULL, dump, TEXT_MAX, true);
     /* A failed query is unknown, even if it returned plausible partial data. */
     trusted_ifaces(p, status_ok ? status : "", dump_ok ? dump : "", a);
     free(status); free(dump);
@@ -1261,6 +1290,15 @@ static int supervised_watch(int dir) {
     return handover || clean ? RC_OK : RC_WATCH;
 }
 
+static bool watcher_current(int dir, long pid, const char *version) {
+    char path[64]; struct stat running, installed;
+    int n = snprintf(path, sizeof(path), "/proc/%ld/exe", pid);
+    return n > 0 && (size_t)n < sizeof(path) && !stat(path, &running) &&
+        !fstatat(dir, "root-controller", &installed, AT_SYMLINK_NOFOLLOW) &&
+        running.st_dev == installed.st_dev && running.st_ino == installed.st_ino &&
+        !strcmp(version, RC_VERSION);
+}
+
 static bool start_watch(int dir) {
     long pid; char version[32];
     if (watcher_status(dir, &pid, version, sizeof(version))) {
@@ -1320,16 +1358,17 @@ int main(int argc, char **argv) {
     if (argc != 2) { log_failure("expected one fixed operation"); return RC_POLICY; }
     const char *op = argv[1];
     bool install = !strcmp(op, "install"), apply = !strcmp(op, "apply");
+    bool maintain = !strcmp(op, "maintain");
     bool guard = !strcmp(op, "guard"), check = !strcmp(op, "check"), enable = !strcmp(op, "enable");
     bool disable = !strcmp(op, "disable"), status = !strcmp(op, "status"), boot = !strcmp(op, "boot");
     bool watch = !strcmp(op, "watch");
-    if (!install && !apply && !guard && !check && !enable && !disable && !status && !boot && !watch) return RC_POLICY;
+    if (!install && !apply && !guard && !check && !enable && !disable && !status && !boot && !watch && !maintain) return RC_POLICY;
     if (getuid() != 0 || geteuid() != 0) { log_failure("root required"); return RC_ROOT; }
     if (!ensure_stdio()) return RC_STORAGE;
     umask(0077);
     signal(SIGPIPE, SIG_IGN); signal(SIGTERM, stop_signal); signal(SIGINT, stop_signal); signal(SIGHUP, upgrade_signal);
     struct policy p;
-    if ((install || apply) && !read_policy_fd(STDIN_FILENO, &p, true)) {
+    if ((install || apply || maintain) && !read_policy_fd(STDIN_FILENO, &p, true)) {
         log_failure("invalid or incomplete policy input"); return RC_POLICY;
     }
     int dir = root_directory(install);
@@ -1353,22 +1392,34 @@ int main(int argc, char **argv) {
     if (lock < 0) { close(dir); return RC_STORAGE; }
     if (!lock_wait(lock)) { close(lock); close(dir); return RC_LOCK; }
     int result = RC_OK;
+    bool reuse = false;
+    if (maintain) {
+        struct policy stored; long pid; char version[32];
+        bool current_watch = watcher_status(dir, &pid, version, sizeof(version)) &&
+            watcher_current(dir, pid, version);
+        reuse = load_policy(dir, &stored) && maintenance_reuses_policy(&p, &stored, current_watch);
+        apply = !reuse;
+    }
     if (install && fchmod(dir, 0700)) result = RC_STORAGE;
-    if (!install && !apply && !load_policy(dir, &p)) result = guard_failed();
+    if (!install && !apply && !maintain && !load_policy(dir, &p)) result = guard_failed();
     if (!result && enable) p.enabled = true;
     if (!result && disable) p.enabled = false;
     if (!result && install && !install_files(dir)) result = RC_STORAGE;
     /* Close direct access synchronously before any Binder query, including a
      * late install over a previously unguarded listener. Each restore itself
      * is atomic; the two IP families intentionally remain separate commits. */
-    if (!result && !guard_policy(&p, false, true)) result = guard_failed();
-    if (!result && !boot && binder_ready() && !guard_policy(&p, true, true)) result = guard_failed();
+    if (!result && !reuse && !guard_policy(&p, false, true)) result = guard_failed();
+    bool binder = !boot && binder_ready();
+    if (!result && (reuse || binder) && !guard_policy(&p, binder, true)) result = guard_failed();
     if (!result && (install || apply || enable || disable) && !save_policy(dir, &p)) {
         (void)shutdown_tcp(); result = RC_STORAGE;
     }
     if (!result && !guard) result = reconcile(&p, NULL);
     /* Guard is intentionally firewall-only; boot/install/apply/enable/disable
      * make sure the independently enabled root policy has a persistent watch.
+     * Unchanged maintenance keeps the live guard while checking its current
+     * rules/listener; a changed policy or missing/currently replaced watcher
+     * takes the full fail-closed apply path.
      */
     (void)flock(lock, LOCK_UN); close(lock);
     if ((!result || result == RC_ADB) && !guard && !start_watch(dir)) {

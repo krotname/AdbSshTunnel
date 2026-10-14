@@ -10,7 +10,7 @@ import java.util.concurrent.TimeUnit;
 /** Installs the APK's controller; fixed root operations never start SSH as root. */
 public final class RootHelper {
     private static final String CONTROLLER = "/data/adb/adb-ssh-tunnel/root-controller";
-    private enum Operation { INSTALL, APPLY, CHECK, ENABLE, DISABLE, STATUS }
+    private enum Operation { INSTALL, APPLY, MAINTAIN, CHECK, ENABLE, DISABLE, STATUS }
     private RootHelper() { }
     public static synchronized String configure(Context context, RootPolicy policy) throws IOException, InterruptedException {
         File binary = extract(context);
@@ -36,7 +36,7 @@ public final class RootHelper {
     }
     public static String status() throws IOException, InterruptedException { return run(CONTROLLER, Operation.STATUS, null); }
     public static synchronized void maintain(Context context) throws IOException, InterruptedException {
-        run(CONTROLLER, Operation.APPLY, RootSettings.read(context).encode());
+        run(CONTROLLER, Operation.MAINTAIN, RootSettings.read(context).encode());
         notifySsh(context);
     }
     private static void notifySsh(Context context) {

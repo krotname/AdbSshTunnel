@@ -52,32 +52,51 @@ public final class WirelessDebuggingHold implements AutoCloseable {
     }
     public void networksChanged(List<NetworkMonitor.Entry> entries) { networks = entries; evaluate(); }
     private boolean trustedWifi() {
+        return "trusted".equals(trustedWifiState());
+    }
+    private String trustedWifiState() {
         try {
             LocationManager location = context.getSystemService(LocationManager.class);
-            if (context.checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED
-                || location == null || !location.isLocationEnabled()) return false;
+            if (context.checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED)
+                return "location_permission_missing";
+            if (location == null || !location.isLocationEnabled()) return "location_disabled";
             ConnectivityManager manager = context.getSystemService(ConnectivityManager.class);
-            if (manager == null) return false;
+            if (manager == null) return "connectivity_unavailable";
+            String reason = "no_wifi_entry";
             for (NetworkMonitor.Entry entry : networks) {
                 // Identity comes from the location-aware NetworkCallback, as it
                 // does for SSH admission. Recheck the live handle and addresses
                 // instead of depending on legacy WifiManager connection info.
-                if (entry.kind != NetworkSettings.Kind.WIFI || !entry.decision.allowed
-                    || entry.addresses.isEmpty()
-                    || !NetworkSettings.read(context, NetworkSettings.Kind.WIFI).decide(entry.identity).allowed) continue;
+                if (entry.kind != NetworkSettings.Kind.WIFI) continue;
+                if (!entry.decision.allowed
+                    || !NetworkSettings.read(context, NetworkSettings.Kind.WIFI).decide(entry.identity).allowed) {
+                    reason = "wifi_policy_denied"; continue;
+                }
+                if (entry.addresses.isEmpty()) { reason = "wifi_addresses_unavailable"; continue; }
                 Network network = Network.fromNetworkHandle(entry.handle);
                 NetworkCapabilities caps = manager.getNetworkCapabilities(network);
                 LinkProperties links = manager.getLinkProperties(network);
-                if (caps == null || links == null || !caps.hasTransport(NetworkCapabilities.TRANSPORT_WIFI)
+                if (caps == null || links == null) { reason = "wifi_handle_unavailable"; continue; }
+                if (!caps.hasTransport(NetworkCapabilities.TRANSPORT_WIFI)
                     || !caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
                     || caps.hasTransport(NetworkCapabilities.TRANSPORT_VPN)
                     || !caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_NOT_VPN)
-                    || !caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_NOT_SUSPENDED)) continue;
+                    || !caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_NOT_SUSPENDED)) {
+                    reason = "wifi_capabilities_unavailable"; continue;
+                }
                 if (links.getLinkAddresses().stream().anyMatch(link -> entry.addresses.contains(link.getAddress().getHostAddress())))
-                    return true;
+                    return "trusted";
+                reason = "wifi_addresses_changed";
             }
-        } catch (RuntimeException ignored) { }
-        return false;
+            return reason;
+        } catch (RuntimeException exception) { return "wifi_check_" + exception.getClass().getSimpleName(); }
+    }
+    public void dump(java.io.PrintWriter writer) {
+        writer.println("wireless_hold: selected=" + selected(context)
+            + " permission=" + permitted(context) + " armed=" + policy.armed()
+            + " developer=" + Settings.Global.getInt(context.getContentResolver(), Settings.Global.DEVELOPMENT_SETTINGS_ENABLED, 0)
+            + " enabled=" + Settings.Global.getInt(context.getContentResolver(), ADB_WIFI, 0)
+            + " networks=" + networks.size() + " wifi=" + trustedWifiState());
     }
     private void evaluate() {
         if (closed) return;

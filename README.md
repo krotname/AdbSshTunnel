@@ -3,7 +3,7 @@
 An Android SSH tunnel restricted to this phone’s local ADB. Key-only SSH,
 no shell, PTY, file transfer, agent/X11 or reverse forwarding.
 
-Package: `name.krot.adbsshtunnel`. Version: `1.1.0` (2). See the release profile and device acceptance before deployment.
+Package: `name.krot.adbsshtunnel`. Version: `1.2.0`. See the release profile and device acceptance before deployment.
 
 ## Without root
 
@@ -25,8 +25,21 @@ Android's current local Wireless Debugging connect port. It does not expose a ne
 plain ADB listener. A port change closes existing SSH connections; reconnect with
 the same command. Other forwarding targets remain rejected.
 
-Android can stop Wireless Debugging on reboot or network change. The application
-does not silently enable it. Keep pairing and SSH host-key verification separate.
+Android can stop Wireless Debugging on reboot or network change. The optional
+**Keep Wireless Debugging enabled** switch observes Android's debugging setting
+and restores a previously enabled session on allowed Wi-Fi while non-root SSH
+is enabled. It requires a one-time grant from a trusted ADB computer:
+
+```sh
+adb shell pm grant name.krot.adbsshtunnel android.permission.WRITE_SECURE_SETTINGS
+```
+
+First enable Wireless Debugging yourself on allowed Wi-Fi to arm recovery.
+Unknown or blocked networks and missing permissions never trigger recovery.
+Disable keep-enabled before turning debugging off yourself. Stopping SSH also
+stops recovery. Failed restoration backs off up to one minute; the app does not
+keep the CPU or Wi-Fi awake. Android can still require network confirmation or
+a new pairing after reboot. Keep pairing and SSH host-key verification separate.
 Pin the SSH host key using a physical USB forward before trusting WAN.
 
 ## Network rules

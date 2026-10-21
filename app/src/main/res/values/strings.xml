@@ -65,7 +65,15 @@
     <string name="adb_wireguard_iface">Trusted WireGuard interface</string>
     <string name="wireless_title">Wireless Debugging</string>
     <string name="wireless_short">Without root: pair this phone on a trusted computer.</string>
-    <string name="wireless_help">Enable Wireless Debugging on Wi-Fi, then Pair device with pairing code. Run adb pair PHONE:PAIR_PORT on a trusted computer. The app discovers the connect port. Android may require re-enabling debugging after reboot or network changes.</string>
+    <string name="wireless_help">Enable Wireless Debugging on Wi-Fi, then Pair device with pairing code. Run adb pair PHONE:PAIR_PORT on a trusted computer. The app discovers the connect port. Keep-enabled can restore debugging on allowed Wi-Fi after Android turns it off.</string>
+    <string name="wireless_hold">Keep Wireless Debugging enabled</string>
+    <string name="wireless_hold_setup_title">Set up keep-enabled permission</string>
+    <string name="wireless_hold_setup">On a trusted computer, run once:\n\nadb shell pm grant name.krot.adbsshtunnel android.permission.WRITE_SECURE_SETTINGS\n\nThen enable this switch and Wireless Debugging. While SSH is enabled in non-root mode, the app restores debugging only on allowed Wi-Fi. Turn this switch off before disabling debugging yourself. Pairing and Android network confirmation remain required.</string>
+    <string name="wireless_hold_off">Keep-enabled is off. The current connect port is still discovered automatically.</string>
+    <string name="wireless_hold_permission">Grant the one-time keep-enabled permission from a trusted computer.</string>
+    <string name="wireless_hold_wait">Waiting for Wireless Debugging to be enabled on allowed Wi-Fi.</string>
+    <string name="wireless_hold_armed">Ready to restore debugging on allowed Wi-Fi while non-root SSH is enabled.</string>
+    <string name="wireless_hold_rejected">Android rejected restoring Wireless Debugging.</string>
     <string name="developer_options">Developer options</string>
     <string name="pairing_help">Pairing instructions</string>
     <string name="language">Interface language</string>

@@ -31,6 +31,7 @@ public final class MainActivity extends AppCompatActivity {
     private LinearLayout page, controls;
     private boolean controlsInDialog;
     private TextView status, wifiSummary, mobileSummary, rootStatus;
+    private TextView wirelessHoldStatus;
     private SwitchMaterial toggle;
     private SwitchMaterial persistentAdb;
     private boolean rootRequest;
@@ -139,7 +140,7 @@ public final class MainActivity extends AppCompatActivity {
     private void showPage() {
         controlsInDialog = false;
         page.removeAllViews(); status = null; toggle = null; wifiSummary = null; mobileSummary = null;
-        rootStatus = null; persistentAdb = null;
+        rootStatus = null; persistentAdb = null; wirelessHoldStatus = null;
         switch (selectedTab) {
             case NETWORKS: networksPage(); break;
             case ADB: adbPage(); break;
@@ -234,6 +235,26 @@ public final class MainActivity extends AppCompatActivity {
         button(root, R.string.connection_details, () -> detail(R.string.root_adb, s(R.string.root_help)));
         text(wireless, s(R.string.wireless_title), 20);
         text(wireless, s(R.string.wireless_short), 15);
+        SwitchMaterial hold = new SwitchMaterial(this);
+        hold.setText(R.string.wireless_hold);
+        hold.setChecked(WirelessDebuggingHold.selected(this));
+        wireless.addView(hold);
+        hold.setOnCheckedChangeListener((v, selected) -> {
+            if (selected && !WirelessDebuggingHold.permitted(this)) {
+                hold.setChecked(false);
+                detail(R.string.wireless_hold, s(R.string.wireless_hold_setup));
+                return;
+            }
+            android.content.SharedPreferences.Editor edit = name.krot.adbsshtunnel.Settings.prefs(this)
+                .edit().putBoolean("wireless_hold", selected);
+            if (!selected) edit.putBoolean("wireless_hold_armed", false);
+            edit.commit();
+            if (name.krot.adbsshtunnel.Settings.enabled(this)) SshdService.select(this, true);
+            refresh();
+        });
+        wirelessHoldStatus = text(wireless, s(WirelessDebuggingHold.status(this)), 14);
+        button(wireless, R.string.wireless_hold_setup_title,
+            () -> detail(R.string.wireless_hold, s(R.string.wireless_hold_setup)));
         button(wireless, R.string.developer_options, () -> {
             try { startActivity(new Intent(Settings.ACTION_APPLICATION_DEVELOPMENT_SETTINGS)); }
             catch (ActivityNotFoundException e) { startActivity(new Intent(Settings.ACTION_SETTINGS)); }
@@ -453,6 +474,7 @@ public final class MainActivity extends AppCompatActivity {
         networkMonitor.start();
     }
     private void refresh() {
+        if (wirelessHoldStatus != null) wirelessHoldStatus.setText(WirelessDebuggingHold.status(this));
         if (status != null) status.setText(UiText.status(this, SshdService.state));
         if (toggle != null) toggle.setChecked(name.krot.adbsshtunnel.Settings.enabled(this));
         if (wifiSummary != null) wifiSummary.setText(summary(NetworkSettings.Kind.WIFI));

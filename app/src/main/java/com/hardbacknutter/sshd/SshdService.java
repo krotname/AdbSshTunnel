@@ -29,6 +29,7 @@ public final class SshdService extends Service {
     private String networkSignature = "";
     private CountDownLatch serverStopped = new CountDownLatch(0);
     private AdbDiscovery discovery;
+    private WirelessDebuggingHold wirelessHold;
     private final Handler main = new Handler(Looper.getMainLooper());
     private final ExecutorService probes = Executors.newSingleThreadExecutor();
     private Future<?> rootCheck;
@@ -85,7 +86,8 @@ public final class SshdService extends Service {
         }
         cancelRootCheck();
         stopNative();
-        int discoveryToken = ++discoveryGeneration;
+        ++discoveryGeneration;
+        if (wirelessHold != null) { wirelessHold.close(); wirelessHold = null; }
         if (discovery != null) { discovery.close(); discovery = null; }
         if (networkMonitor != null) networkMonitor.close();
         desiredPort = 0; networks = Collections.emptyList(); networkSignature = "";
@@ -96,21 +98,33 @@ public final class SshdService extends Service {
                 | (Build.VERSION.SDK_INT >= 34 ? ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE : 0)); }
             catch (SecurityException e) { publish("Open the app to identify Wi-Fi"); }
         }
-        networkMonitor = new NetworkMonitor(this, entries -> { networks = entries; reconcile(); });
+        networkMonitor = new NetworkMonitor(this, entries -> {
+            networks = entries;
+            if (wirelessHold != null) wirelessHold.networksChanged(entries);
+            reconcile();
+        });
         networkMonitor.start();
         startupFailed = false;
         try { KeyPolicy.parse(Settings.keys(this)); } catch (IOException e) { Settings.setEnabled(this, false); startupFailed = true; publish(e.getMessage()); stopSelf(); return START_NOT_STICKY; }
         boolean rootMode = Settings.prefs(this).getBoolean("root_mode", false);
         if (rootMode) checkRootGuard();
         else {
-            publish("Waiting for Wireless Debugging");
-            discovery = new AdbDiscovery(this, (port, message) -> main.post(() -> {
-                if (discoveryToken != discoveryGeneration || !Settings.enabled(this) || Settings.prefs(this).getBoolean("root_mode", false)) return;
-                desiredPort = port;
-                if (port == 0) { stopNative(); publish(message); }
-                else reconcile();
-            }));
-            discovery.start();
+            wirelessHold = new WirelessDebuggingHold(this, enabled -> {
+                int token = ++discoveryGeneration;
+                if (discovery != null) { discovery.close(); discovery = null; }
+                desiredPort = 0; stopNative();
+                publish("Waiting for Wireless Debugging");
+                if (!enabled) return;
+                discovery = new AdbDiscovery(this, (port, message) -> main.post(() -> {
+                    if (token != discoveryGeneration || !Settings.enabled(this) || Settings.prefs(this).getBoolean("root_mode", false)) return;
+                    desiredPort = port;
+                    if (port == 0) { stopNative(); publish(message); }
+                    else reconcile();
+                }));
+                discovery.start();
+            });
+            wirelessHold.start();
+            wirelessHold.networksChanged(networks);
         }
         return START_STICKY;
     }
@@ -232,6 +246,7 @@ public final class SshdService extends Service {
     }
     @Override public void onDestroy() {
         ++discoveryGeneration;
+        if (wirelessHold != null) wirelessHold.close(); wirelessHold = null;
         cancelRootCheck();
         stopNative(); if (discovery != null) discovery.close(); discovery = null;
         if (networkMonitor != null) networkMonitor.close(); networkMonitor = null; networks = Collections.emptyList();

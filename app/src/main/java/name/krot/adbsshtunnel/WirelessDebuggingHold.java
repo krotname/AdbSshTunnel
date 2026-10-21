@@ -94,7 +94,6 @@ public final class WirelessDebuggingHold implements AutoCloseable {
     public void dump(java.io.PrintWriter writer) {
         writer.println("wireless_hold: selected=" + selected(context)
             + " permission=" + permitted(context) + " armed=" + policy.armed()
-            + " developer=" + Settings.Global.getInt(context.getContentResolver(), Settings.Global.DEVELOPMENT_SETTINGS_ENABLED, 0)
             + " enabled=" + Settings.Global.getInt(context.getContentResolver(), ADB_WIFI, 0)
             + " networks=" + networks.size() + " wifi=" + trustedWifiState());
     }
@@ -105,9 +104,9 @@ public final class WirelessDebuggingHold implements AutoCloseable {
         if (!Objects.equals(lastEnabled, enabled)) { lastEnabled = enabled; listener.accept(enabled); }
         boolean selected = selected(context) && name.krot.adbsshtunnel.Settings.enabled(context);
         boolean before = policy.armed();
-        boolean developer = Settings.Global.getInt(context.getContentResolver(),
-            Settings.Global.DEVELOPMENT_SETTINGS_ENABLED, 0) == 1;
-        long delay = policy.update(selected, permitted(context) && developer, trustedWifi(), enabled, SystemClock.elapsedRealtime());
+        // DEVELOPMENT_SETTINGS_ENABLED always reads as 0 for third-party apps.
+        // Arming requires an already enabled session on trusted Wi-Fi instead.
+        long delay = policy.update(selected, permitted(context), trustedWifi(), enabled, SystemClock.elapsedRealtime());
         if (before != policy.armed()) name.krot.adbsshtunnel.Settings.prefs(context).edit()
             .putBoolean("wireless_hold_armed", policy.armed()).apply();
         if (enabled || !selected) name.krot.adbsshtunnel.Settings.prefs(context).edit()

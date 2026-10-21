@@ -257,4 +257,10 @@ public final class SshdService extends Service {
         super.onDestroy();
     }
     @Override public IBinder onBind(Intent intent) { return null; }
+    @Override protected void dump(FileDescriptor descriptor, PrintWriter writer, String[] args) {
+        writer.println("ssh_enabled=" + Settings.enabled(this)
+            + " root_mode=" + Settings.prefs(this).getBoolean("root_mode", false));
+        if (wirelessHold != null) wirelessHold.dump(writer);
+        else writer.println("wireless_hold: inactive");
+    }
 }

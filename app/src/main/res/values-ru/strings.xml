@@ -65,7 +65,15 @@
     <string name="adb_wireguard_iface">Доверенный интерфейс WireGuard</string>
     <string name="wireless_title">Беспроводная отладка</string>
     <string name="wireless_short">Без root: выполните сопряжение с доверенным компьютером.</string>
-    <string name="wireless_help">Включите беспроводную отладку в сети Wi-Fi, затем «Подключить устройство с помощью кода». Выполните adb pair PHONE:PAIR_PORT на доверенном компьютере. Приложение определит порт подключения. После перезагрузки или смены сети Android может потребовать включить отладку заново.</string>
+    <string name="wireless_help">Включите беспроводную отладку в сети Wi-Fi, затем «Подключить устройство с помощью кода». Выполните adb pair PHONE:PAIR_PORT на доверенном компьютере. Приложение определит порт подключения. Удержание может восстановить отладку в разрешённой сети Wi-Fi, если Android её отключит.</string>
+    <string name="wireless_hold">Удерживать беспроводную отладку</string>
+    <string name="wireless_hold_setup_title">Разрешение удержания</string>
+    <string name="wireless_hold_setup">На доверенном компьютере один раз выполните:\n\nadb shell pm grant name.krot.adbsshtunnel android.permission.WRITE_SECURE_SETTINGS\n\nЗатем включите этот переключатель и беспроводную отладку. Пока SSH включён без root, приложение восстанавливает отладку только в разрешённых сетях Wi-Fi. Перед самостоятельным отключением отладки выключите удержание. Сопряжение и подтверждение сети Android остаются обязательными.</string>
+    <string name="wireless_hold_off">Удержание выключено. Текущий порт подключения определяется автоматически.</string>
+    <string name="wireless_hold_permission">Один раз выдайте разрешение удержания с доверенного компьютера.</string>
+    <string name="wireless_hold_wait">Ожидание включения отладки в разрешённой сети Wi-Fi.</string>
+    <string name="wireless_hold_armed">Готово к восстановлению отладки в разрешённой сети Wi-Fi, пока SSH включён без root.</string>
+    <string name="wireless_hold_rejected">Android отклонил восстановление беспроводной отладки.</string>
     <string name="developer_options">Для разработчиков</string>
     <string name="pairing_help">Инструкция сопряжения</string>
     <string name="language">Язык интерфейса</string>

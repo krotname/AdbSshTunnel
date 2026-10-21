@@ -1,0 +1,120 @@
+package name.krot.adbsshtunnel;
+
+import android.Manifest;
+import android.content.Context;
+import android.content.Intent;
+import android.content.pm.PackageManager;
+import android.database.ContentObserver;
+import android.location.LocationManager;
+import android.net.*;
+import android.net.wifi.*;
+import android.os.*;
+import android.provider.Settings;
+import java.util.*;
+
+/** Runs only inside the enabled non-root SSH foreground service. */
+public final class WirelessDebuggingHold implements AutoCloseable {
+    private static final String ADB_WIFI = "adb_wifi_enabled";
+    public static final String PERMISSION = "android.permission.WRITE_SECURE_SETTINGS";
+    private final Context context;
+    private final java.util.function.Consumer<Boolean> listener;
+    private final Handler main = new Handler(Looper.getMainLooper());
+    private final WirelessHoldPolicy policy;
+    private List<NetworkMonitor.Entry> networks = Collections.emptyList();
+    private Boolean lastEnabled;
+    private boolean closed;
+    private int lastStatus;
+    private final Runnable recheck = this::evaluate;
+    private final ContentObserver observer = new ContentObserver(main) {
+        @Override public void onChange(boolean selfChange) { evaluate(); }
+    };
+    public WirelessDebuggingHold(Context context, java.util.function.Consumer<Boolean> listener) {
+        this.context = context; this.listener = listener;
+        policy = new WirelessHoldPolicy(name.krot.adbsshtunnel.Settings.prefs(context)
+            .getBoolean("wireless_hold_armed", false));
+    }
+    public static boolean permitted(Context context) {
+        return context.checkSelfPermission(PERMISSION) == PackageManager.PERMISSION_GRANTED;
+    }
+    public static boolean selected(Context context) {
+        return name.krot.adbsshtunnel.Settings.prefs(context).getBoolean("wireless_hold", false);
+    }
+    public static int status(Context context) {
+        if (!selected(context)) return R.string.wireless_hold_off;
+        if (!permitted(context)) return R.string.wireless_hold_permission;
+        if (name.krot.adbsshtunnel.Settings.prefs(context).getBoolean("wireless_hold_rejected", false))
+            return R.string.wireless_hold_rejected;
+        return name.krot.adbsshtunnel.Settings.prefs(context).getBoolean("wireless_hold_armed", false)
+            ? R.string.wireless_hold_armed : R.string.wireless_hold_wait;
+    }
+    public void start() {
+        context.getContentResolver().registerContentObserver(Settings.Global.getUriFor(ADB_WIFI), false, observer);
+        evaluate();
+    }
+    public void networksChanged(List<NetworkMonitor.Entry> entries) { networks = entries; evaluate(); }
+    @SuppressWarnings("deprecation")
+    private boolean trustedWifi() {
+        try {
+            LocationManager location = context.getSystemService(LocationManager.class);
+            if (context.checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED
+                || location == null || !location.isLocationEnabled()) return false;
+            WifiManager wifi = context.getApplicationContext().getSystemService(WifiManager.class);
+            WifiInfo info = wifi == null ? null : wifi.getConnectionInfo();
+            if (info == null || info.getSupplicantState() != SupplicantState.COMPLETED) return false;
+            String ssid = info.getSSID();
+            if (ssid == null || WifiManager.UNKNOWN_SSID.equals(ssid)) return false;
+            if (ssid.length() >= 2 && ssid.startsWith("\"") && ssid.endsWith("\""))
+                ssid = ssid.substring(1, ssid.length() - 1);
+            if (!NetworkSettings.read(context, NetworkSettings.Kind.WIFI).decide(ssid).allowed) return false;
+            ConnectivityManager manager = context.getSystemService(ConnectivityManager.class);
+            if (manager == null) return false;
+            for (NetworkMonitor.Entry entry : networks) {
+                if (entry.kind != NetworkSettings.Kind.WIFI || !entry.decision.allowed
+                    || !ssid.equals(entry.identity) || entry.addresses.isEmpty()) continue;
+                Network network = Network.fromNetworkHandle(entry.handle);
+                NetworkCapabilities caps = manager.getNetworkCapabilities(network);
+                LinkProperties links = manager.getLinkProperties(network);
+                if (caps == null || links == null || !caps.hasTransport(NetworkCapabilities.TRANSPORT_WIFI)
+                    || !caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
+                    || caps.hasTransport(NetworkCapabilities.TRANSPORT_VPN)
+                    || !caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_NOT_VPN)
+                    || !caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_NOT_SUSPENDED)) continue;
+                if (links.getLinkAddresses().stream().anyMatch(link -> entry.addresses.contains(link.getAddress().getHostAddress())))
+                    return true;
+            }
+        } catch (RuntimeException ignored) { }
+        return false;
+    }
+    private void evaluate() {
+        if (closed) return;
+        main.removeCallbacks(recheck);
+        boolean enabled = Settings.Global.getInt(context.getContentResolver(), ADB_WIFI, 0) == 1;
+        if (!Objects.equals(lastEnabled, enabled)) { lastEnabled = enabled; listener.accept(enabled); }
+        boolean selected = selected(context) && name.krot.adbsshtunnel.Settings.enabled(context);
+        boolean before = policy.armed();
+        boolean developer = Settings.Global.getInt(context.getContentResolver(),
+            Settings.Global.DEVELOPMENT_SETTINGS_ENABLED, 0) == 1;
+        long delay = policy.update(selected, permitted(context) && developer, trustedWifi(), enabled, SystemClock.elapsedRealtime());
+        if (before != policy.armed()) name.krot.adbsshtunnel.Settings.prefs(context).edit()
+            .putBoolean("wireless_hold_armed", policy.armed()).apply();
+        if (enabled || !selected) name.krot.adbsshtunnel.Settings.prefs(context).edit()
+            .putBoolean("wireless_hold_rejected", false).apply();
+        if (delay == 0) {
+            boolean restored = false;
+            try { restored = Settings.Global.putInt(context.getContentResolver(), ADB_WIFI, 1); }
+            catch (SecurityException ignored) { }
+            name.krot.adbsshtunnel.Settings.prefs(context).edit().putBoolean("wireless_hold_rejected", !restored).apply();
+            delay = 1_000;
+        }
+        if (delay > 0) main.postDelayed(recheck, delay);
+        int status = status(context);
+        if (lastStatus != status) {
+            lastStatus = status;
+            context.sendBroadcast(new Intent("name.krot.adbsshtunnel.STATE").setPackage(context.getPackageName()));
+        }
+    }
+    @Override public void close() {
+        closed = true; main.removeCallbacks(recheck);
+        context.getContentResolver().unregisterContentObserver(observer);
+    }
+}

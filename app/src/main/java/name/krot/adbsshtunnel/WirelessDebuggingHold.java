@@ -7,7 +7,6 @@ import android.content.pm.PackageManager;
 import android.database.ContentObserver;
 import android.location.LocationManager;
 import android.net.*;
-import android.net.wifi.*;
 import android.os.*;
 import android.provider.Settings;
 import java.util.*;
@@ -52,25 +51,20 @@ public final class WirelessDebuggingHold implements AutoCloseable {
         evaluate();
     }
     public void networksChanged(List<NetworkMonitor.Entry> entries) { networks = entries; evaluate(); }
-    @SuppressWarnings("deprecation")
     private boolean trustedWifi() {
         try {
             LocationManager location = context.getSystemService(LocationManager.class);
             if (context.checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED
                 || location == null || !location.isLocationEnabled()) return false;
-            WifiManager wifi = context.getApplicationContext().getSystemService(WifiManager.class);
-            WifiInfo info = wifi == null ? null : wifi.getConnectionInfo();
-            if (info == null || info.getSupplicantState() != SupplicantState.COMPLETED) return false;
-            String ssid = info.getSSID();
-            if (ssid == null || WifiManager.UNKNOWN_SSID.equals(ssid)) return false;
-            if (ssid.length() >= 2 && ssid.startsWith("\"") && ssid.endsWith("\""))
-                ssid = ssid.substring(1, ssid.length() - 1);
-            if (!NetworkSettings.read(context, NetworkSettings.Kind.WIFI).decide(ssid).allowed) return false;
             ConnectivityManager manager = context.getSystemService(ConnectivityManager.class);
             if (manager == null) return false;
             for (NetworkMonitor.Entry entry : networks) {
+                // Identity comes from the location-aware NetworkCallback, as it
+                // does for SSH admission. Recheck the live handle and addresses
+                // instead of depending on legacy WifiManager connection info.
                 if (entry.kind != NetworkSettings.Kind.WIFI || !entry.decision.allowed
-                    || !ssid.equals(entry.identity) || entry.addresses.isEmpty()) continue;
+                    || entry.addresses.isEmpty()
+                    || !NetworkSettings.read(context, NetworkSettings.Kind.WIFI).decide(entry.identity).allowed) continue;
                 Network network = Network.fromNetworkHandle(entry.handle);
                 NetworkCapabilities caps = manager.getNetworkCapabilities(network);
                 LinkProperties links = manager.getLinkProperties(network);

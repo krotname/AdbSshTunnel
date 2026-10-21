@@ -3,7 +3,7 @@
 An Android SSH tunnel restricted to this phone’s local ADB. Key-only SSH,
 no shell, PTY, file transfer, agent/X11 or reverse forwarding.
 
-Package: `name.krot.adbsshtunnel`. Version: `1.2.0`. See the release profile and device acceptance before deployment.
+Package: `name.krot.adbsshtunnel`. Version: `1.2.1`. See the release profile and device acceptance before deployment.
 
 ## Without root
 

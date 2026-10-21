@@ -4,8 +4,8 @@
 |---|---|
 | Репозиторий | `krotname/AdbSshTunnel`, public, main |
 | Package | `name.krot.adbsshtunnel` |
-| Публичная версия | `app/build.gradle`: 1.2.0 (SemVer 2.0.0) |
-| Android versionCode | 5; отдельное техническое поле |
+| Публичная версия | `app/build.gradle`: 1.2.1 (SemVer 2.0.0) |
+| Android versionCode | 6; отдельное техническое поле |
 | APK | Один APK с arm64-v8a и x86_64 |
 | Сборка | Red / Linux, изолированный непривилегированный ARC job с постоянным кэшем; Windows-сборки только White |
 | Toolchain | SDK 36 / JDK 21 / Java 17 / AGP 8.10.1 / Gradle 8.11.1 |

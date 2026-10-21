@@ -14,11 +14,20 @@ public final class AdbDiscovery implements AutoCloseable {
     private final NsdManager manager;
     private final Listener callback;
     private final WifiManager.MulticastLock multicastLock;
-    private final ExecutorService resolver = Executors.newSingleThreadExecutor();
+    private final ScheduledExecutorService resolver = Executors.newSingleThreadScheduledExecutor();
+    private final ServiceResolveQueue<ResolveRequest> resolveQueue = new ServiceResolveQueue<>(this::resolve);
     private final java.util.Map<String, Long> sightings = new java.util.HashMap<>();
     private long nextSighting;
     private volatile boolean closed;
     private volatile String activeName;
+    private static final class ResolveRequest {
+        final NsdServiceInfo service;
+        final long sighting;
+        final int attempt;
+        ResolveRequest(NsdServiceInfo service, long sighting, int attempt) {
+            this.service = service; this.sighting = sighting; this.attempt = attempt;
+        }
+    }
     private final NsdManager.DiscoveryListener discovery = new NsdManager.DiscoveryListener() {
         public void onDiscoveryStarted(String type) { }
         public void onDiscoveryStopped(String type) { releaseMulticast(); }
@@ -30,11 +39,44 @@ public final class AdbDiscovery implements AutoCloseable {
                 if (closed) return;
                 sighting = ++nextSighting;
                 sightings.put(service.getServiceName(), sighting);
+                resolveQueue.offer(service.getServiceName(), new ResolveRequest(service, sighting, 0));
             }
-            manager.resolveService(service, new NsdManager.ResolveListener() {
-                public void onResolveFailed(NsdServiceInfo s, int code) { }
+        }
+        public void onServiceLost(NsdServiceInfo s) {
+            synchronized (AdbDiscovery.this) {
+                sightings.remove(s.getServiceName());
+                resolveQueue.remove(s.getServiceName());
+                if (s.getServiceName().equals(activeName) && !closed) {
+                    activeName = null;
+                    callback.onPort(0, "Wireless Debugging stopped; enable it in Developer options");
+                }
+            }
+        }
+    };
+    private synchronized boolean current(ResolveRequest request) {
+        return !closed && Long.valueOf(request.sighting).equals(sightings.get(request.service.getServiceName()));
+    }
+    private void retry(ResolveRequest request) {
+        if (request.attempt != 0 || !current(request)) return;
+        try {
+            resolver.schedule(() -> {
+                synchronized (AdbDiscovery.this) {
+                    if (current(request)) resolveQueue.offer(request.service.getServiceName(),
+                        new ResolveRequest(request.service, request.sighting, 1));
+                }
+            }, 1, TimeUnit.SECONDS);
+        } catch (RejectedExecutionException ignored) { }
+    }
+    private void resolve(ResolveRequest request, Runnable completed) {
+        if (!current(request)) { completed.run(); return; }
+        try {
+            manager.resolveService(request.service, new NsdManager.ResolveListener() {
+                public void onResolveFailed(NsdServiceInfo s, int code) {
+                    completed.run(); retry(request);
+                }
                 public void onServiceResolved(NsdServiceInfo s) {
-                    if (closed) return;
+                    completed.run();
+                    if (!current(request)) return;
                     try {
                     resolver.execute(() -> {
                         if (closed) return;
@@ -44,26 +86,17 @@ public final class AdbDiscovery implements AutoCloseable {
                             int port = s.getPort();
                             AdbTlsProbe.verify(port);
                             synchronized (AdbDiscovery.this) {
-                                if (closed || !Long.valueOf(sighting).equals(sightings.get(service.getServiceName()))) return;
-                                activeName = service.getServiceName();
+                                if (!current(request)) return;
+                                activeName = request.service.getServiceName();
                                 callback.onPort(port, "Wireless Debugging: " + port);
                             }
-                        } catch (Exception ignored) { }
+                        } catch (Exception ignored) { retry(request); }
                     });
                     } catch (RejectedExecutionException ignored) { }
                 }
             });
-        }
-        public void onServiceLost(NsdServiceInfo s) {
-            synchronized (AdbDiscovery.this) {
-                sightings.remove(s.getServiceName());
-                if (s.getServiceName().equals(activeName) && !closed) {
-                    activeName = null;
-                    callback.onPort(0, "Wireless Debugging stopped; enable it in Developer options");
-                }
-            }
-        }
-    };
+        } catch (RuntimeException e) { completed.run(); retry(request); }
+    }
     public AdbDiscovery(Context c, Listener callback) {
         manager = c.getSystemService(NsdManager.class); this.callback = callback;
         WifiManager wifi = c.getApplicationContext().getSystemService(WifiManager.class);
@@ -81,6 +114,7 @@ public final class AdbDiscovery implements AutoCloseable {
     public synchronized void close() {
         closed = true;
         sightings.clear(); activeName = null;
+        resolveQueue.close();
         try { manager.stopServiceDiscovery(discovery); }
         catch (IllegalArgumentException ignored) { }
         finally { releaseMulticast(); resolver.shutdownNow(); }

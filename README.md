@@ -3,7 +3,13 @@
 An Android SSH tunnel restricted to this phone’s local ADB. Key-only SSH,
 no shell, PTY, file transfer, agent/X11 or reverse forwarding.
 
-Package: `name.krot.adbsshtunnel`. Version: `1.2.2`. See the release profile and device acceptance before deployment.
+Package: `name.krot.adbsshtunnel`. Version: `2.0.0`. See the release profile and device acceptance before deployment.
+
+One main screen contains the tunnel switch, live status and connection information.
+Expand **Access: networks and keys**, **ADB mode**, or **More** when needed.
+Both ADB modes, independent network policies, key management, diagnostics, language
+selection and the Quick Settings tile remain available. Upgrades preserve settings
+and keys. Missing `su` is explained explicitly; Wireless Debugging works without root.
 
 ## Without root
 
@@ -60,7 +66,7 @@ See [acceptance scenarios](docs/network-policy-acceptance.md).
 
 ## With root
 
-On the ADB tab, install the APK's native root controller and select persistent protected ADB. The controller lives in a root-owned directory and receives only fixed operations and a validated policy. SSH stays under the app UID.
+In **ADB mode**, choose **Root ADB**, install the APK's native root controller and select persistent protected ADB. The controller lives in a root-owned directory and receives only fixed operations and a validated policy. SSH stays under the app UID.
 
 Persistent ADB is independent of the SSH switch and can be disabled explicitly. Its own trust settings contain a Wi-Fi SSID prefix, an exact personal hotspot SSID and a WireGuard interface. Empty settings permit loopback only; unknown Wi-Fi and mobile direct ADB remain closed. SSH retains separate allowlists and blocklists. USB debugging and authorization keys are preserved.
 

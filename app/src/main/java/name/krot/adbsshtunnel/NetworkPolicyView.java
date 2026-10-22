@@ -20,23 +20,21 @@ public final class NetworkPolicyView extends LinearLayout {
         setOrientation(VERTICAL); policy = NetworkSettings.read(context, kind);
         TextView title = new TextView(context); title.setText(context.getString(kind == NetworkSettings.Kind.WIFI ? R.string.wifi_networks : R.string.mobile_operators)); title.setTextSize(20); addView(title);
         current = new TextView(context); current.setTextIsSelectable(true); addView(current);
-        RadioGroup modes = new RadioGroup(context);
-        String[] labels = {context.getString(R.string.mode_allow), context.getString(R.string.mode_deny), context.getString(R.string.mode_disabled)};
+        Spinner modes = new Spinner(context);
+        modes.setContentDescription(context.getString(R.string.network_mode));
+        String[] labels = {context.getString(R.string.network_mode_allow), context.getString(R.string.network_mode_deny), context.getString(R.string.network_mode_disabled)};
         NetworkPolicy.Mode[] values = NetworkPolicy.Mode.values();
-        for (int i = 0; i < values.length; i++) {
-            RadioButton button = new RadioButton(context); button.setId(View.generateViewId()); button.setText(labels[i]); button.setTag(values[i]); modes.addView(button);
-            if (policy.mode == values[i]) modes.check(button.getId());
-        }
-        modes.setOnCheckedChangeListener((group, checked) -> {
-            RadioButton selected = group.findViewById(checked);
-            if (selected != null && !save((NetworkPolicy.Mode) selected.getTag(), policy.allow, policy.deny)) {
-                for (int i = 0; i < group.getChildCount(); i++) {
-                    RadioButton button = (RadioButton) group.getChildAt(i);
-                    if (button.getTag() == policy.mode) group.check(button.getId());
-                }
+        ArrayAdapter<String> choices = new ArrayAdapter<>(context, android.R.layout.simple_spinner_item, labels);
+        choices.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
+        modes.setAdapter(choices); modes.setSelection(policy.mode.ordinal());
+        modes.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
+            @Override public void onItemSelected(AdapterView<?> parent, View view, int position, long rowId) {
+                if (values[position] != policy.mode && !save(values[position], policy.allow, policy.deny))
+                    modes.setSelection(policy.mode.ordinal());
             }
+            @Override public void onNothingSelected(AdapterView<?> parent) {}
         });
-        addView(modes);
+        addView(modes, new LinearLayout.LayoutParams(-1, Math.round(56 * getResources().getDisplayMetrics().density)));
         TextView help = new TextView(context);
         help.setText(kind == NetworkSettings.Kind.WIFI
             ? context.getString(R.string.wifi_help)
@@ -46,8 +44,9 @@ public final class NetworkPolicyView extends LinearLayout {
         TextInputEditText id = new TextInputEditText(input.getContext()); id.setSingleLine(true);
         if (kind == NetworkSettings.Kind.MOBILE) id.setInputType(android.text.InputType.TYPE_CLASS_NUMBER);
         input.addView(id); addView(input);
-        action(context.getString(R.string.add_allow), () -> add(id, true));
-        action(context.getString(R.string.add_deny), () -> add(id, false));
+        action(context.getString(R.string.add_rule), () -> new androidx.appcompat.app.AlertDialog.Builder(context)
+            .setTitle(R.string.add_rule).setItems(new String[]{context.getString(R.string.add_allow), context.getString(R.string.add_deny)},
+                (dialog, choice) -> add(id, choice == 0)).setNegativeButton(R.string.cancel, null).show());
         action(context.getString(R.string.allow_current), () -> {
             List<NetworkMonitor.Entry> entries = visibleEntries;
             List<String> identities = new ArrayList<>();

@@ -1,4 +1,20 @@
 <resources>
+    <string name="root_su_missing">su was not found. Root is unavailable: it may be disabled, hidden from this app or not installed. To use SSH without root, choose Wireless Debugging in ADB mode.</string>
+    <string name="access_settings">Access: networks and keys</string>
+    <string name="adb_mode">ADB mode</string>
+    <string name="wireless_mode">Wireless Debugging (no root)</string>
+    <string name="advanced_settings">More</string>
+    <string name="advanced_summary">Language, Quick Settings tile and diagnostics</string>
+    <string name="adb_help">Setup instructions</string>
+    <string name="expanded">Expanded</string>
+    <string name="collapsed">Collapsed</string>
+    <string name="about_title">About</string>
+    <string name="about_version">ADB SSH Tunnel %1$s</string>
+    <string name="network_mode">Network access</string>
+    <string name="network_mode_allow">Only allowed networks</string>
+    <string name="network_mode_deny">All except blocked networks</string>
+    <string name="network_mode_disabled">Access disabled</string>
+    <string name="add_rule">Add rule…</string>
     <string name="app_name">ADB SSH Tunnel</string>
     <string name="tab_tunnel">Tunnel</string>
     <string name="tab_networks">Networks</string>
@@ -9,7 +25,7 @@
     <string name="connect">How to connect</string>
     <string name="connect_help">Pair ADB first. Pin the SSH host key through physical USB before WAN use. Reconnect SSH and ADB after a network or debugging-port change. The client target stays 127.0.0.1:5555.</string>
     <string name="connect_command">ssh -N -L 15555:127.0.0.1:5555 -p 19191 -i YOUR_KEY USER@PHONE\nadb connect 127.0.0.1:15555</string>
-    <string name="connection_details">Connection details</string>
+    <string name="connection_details">Connect</string>
     <string name="address_check">Check external IPv4</string>
     <string name="address_help">This sends an HTTPS request to api.ipify.org. A public address does not prove incoming access: CGNAT, operator filtering or firewall rules can block it. A VPN address may identify its exit.</string>
     <string name="check_now">Check</string>

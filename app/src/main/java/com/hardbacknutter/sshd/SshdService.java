@@ -59,7 +59,9 @@ public final class SshdService extends Service {
     private Notification notification() {
         PendingIntent open = PendingIntent.getActivity(this, 0, new Intent(this, MainActivity.class), PendingIntent.FLAG_IMMUTABLE);
         return new Notification.Builder(this, "tunnel").setContentTitle("ADB SSH Tunnel")
-            .setContentText(state).setSmallIcon(name.krot.adbsshtunnel.R.drawable.ic_tunnel)
+            .setContentText(name.krot.adbsshtunnel.UiText.status(this, state))
+            .setStyle(new Notification.BigTextStyle().bigText(name.krot.adbsshtunnel.UiText.status(this, state)))
+            .setSmallIcon(name.krot.adbsshtunnel.R.drawable.ic_tunnel)
             .setContentIntent(open).setOngoing(true).build();
     }
     private void publish(String text) {

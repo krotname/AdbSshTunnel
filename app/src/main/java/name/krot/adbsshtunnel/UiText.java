@@ -26,6 +26,7 @@ public final class UiText {
     }
     public static String status(Context context, String state) {
         if (state == null) return "";
+        if (isSuMissing(state)) return context.getString(R.string.root_su_missing);
         int id = 0;
         switch (state) {
             case "Stopped": id = R.string.stopped; break;
@@ -58,6 +59,14 @@ public final class UiText {
         if (state.startsWith(prefix) && end > prefix.length())
             return context.getString(R.string.ssh_ready, state.substring(prefix.length(), end));
         return state;
+    }
+    static boolean isSuMissing(String error) {
+        return error != null && (error.equals("Cannot run program \"su\": error=2")
+            || error.startsWith("Cannot run program \"su\": error=2,"));
+    }
+    public static String rootError(Context context, String error) {
+        if (isSuMissing(error)) return context.getString(R.string.root_su_missing);
+        return error == null ? "" : error;
     }
     public static String diagnostics(Context context, String value) {
         value = value.replace("External IPv4: ", context.getString(R.string.diag_external));

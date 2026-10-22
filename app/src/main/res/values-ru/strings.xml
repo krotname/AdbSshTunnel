@@ -1,4 +1,20 @@
 <resources>
+    <string name="root_su_missing">Команда su не найдена. Root недоступен: он может быть отключён, скрыт от приложения или не установлен. Для работы SSH без root выберите «Беспроводная отладка» в разделе «Режим ADB».</string>
+    <string name="access_settings">Доступ: сети и ключи</string>
+    <string name="adb_mode">Режим ADB</string>
+    <string name="wireless_mode">Беспроводная отладка (без root)</string>
+    <string name="advanced_settings">Дополнительно</string>
+    <string name="advanced_summary">Язык, плитка шторки и диагностика</string>
+    <string name="adb_help">Инструкция по настройке</string>
+    <string name="expanded">Развёрнуто</string>
+    <string name="collapsed">Свёрнуто</string>
+    <string name="about_title">О приложении</string>
+    <string name="about_version">ADB SSH Tunnel %1$s</string>
+    <string name="network_mode">Доступ из сети</string>
+    <string name="network_mode_allow">Только разрешённые сети</string>
+    <string name="network_mode_deny">Все, кроме запрещённых</string>
+    <string name="network_mode_disabled">Доступ выключен</string>
+    <string name="add_rule">Добавить правило…</string>
     <string name="app_name">ADB SSH Tunnel</string>
     <string name="tab_tunnel">Туннель</string>
     <string name="tab_networks">Сети</string>
@@ -9,7 +25,7 @@
     <string name="connect">Как подключиться</string>
     <string name="connect_help">Сначала выполните сопряжение ADB. Перед доступом из интернета проверьте SSH-ключ сервера по USB. После смены сети или порта отладки переподключите SSH и ADB. Адрес назначения клиента остаётся 127.0.0.1:5555.</string>
     <string name="connect_command">ssh -N -L 15555:127.0.0.1:5555 -p 19191 -i YOUR_KEY USER@PHONE\nadb connect 127.0.0.1:15555</string>
-    <string name="connection_details">Параметры подключения</string>
+    <string name="connection_details">Подключение</string>
     <string name="address_check">Проверить внешний IPv4</string>
     <string name="address_help">Будет отправлен HTTPS-запрос к api.ipify.org. Публичный адрес не доказывает входящую доступность: CGNAT, оператор или межсетевой экран могут её блокировать. При VPN может отображаться адрес его выхода.</string>
     <string name="check_now">Проверить</string>

@@ -16,7 +16,6 @@ import androidx.appcompat.app.AppCompatDelegate;
 import androidx.core.content.ContextCompat;
 import androidx.core.os.LocaleListCompat;
 import androidx.core.view.*;
-import com.google.android.material.bottomnavigation.BottomNavigationView;
 import com.google.android.material.button.MaterialButton;
 import com.google.android.material.card.MaterialCardView;
 import com.google.android.material.switchmaterial.SwitchMaterial;
@@ -26,19 +25,19 @@ import java.io.*;
 import java.util.*;
 
 public final class MainActivity extends AppCompatActivity {
-    private static final int TUNNEL = 1, NETWORKS = 2, ADB = 3, PREFERENCES = 4;
-    private int selectedTab = TUNNEL;
-    private LinearLayout page, controls;
-    private boolean controlsInDialog;
+    private final Set<String> expandedSections = new HashSet<>();
+    private LinearLayout page;
+    private ScrollView scroller;
     private TextView status, wifiSummary, mobileSummary, rootStatus;
     private TextView wirelessHoldStatus;
+    private TextView adbSummary;
     private SwitchMaterial toggle;
     private SwitchMaterial persistentAdb;
     private boolean rootRequest;
     private NetworkMonitor networkMonitor;
     private NetworkPolicyView editor;
     private List<NetworkMonitor.Entry> networks = Collections.emptyList();
-    private boolean wide, compact, checkingAddress;
+    private boolean compact, checkingAddress;
     private final BroadcastReceiver receiver = new BroadcastReceiver() {
         @Override public void onReceive(Context c, Intent i) { refresh(); }
     };
@@ -76,8 +75,7 @@ public final class MainActivity extends AppCompatActivity {
     private LinearLayout card(LinearLayout row) {
         MaterialCardView card = new MaterialCardView(this);
         card.setRadius(dp(20)); card.setCardElevation(0);
-        LinearLayout.LayoutParams params = wide
-            ? new LinearLayout.LayoutParams(0, -1, 1) : new LinearLayout.LayoutParams(-1, -2);
+        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(-1, -2);
         params.setMargins(dp(4), dp(4), dp(4), dp(4));
         row.addView(card, params);
         LinearLayout inner = new LinearLayout(this);
@@ -86,17 +84,42 @@ public final class MainActivity extends AppCompatActivity {
         card.addView(inner);
         return inner;
     }
-    private LinearLayout groups() {
-        LinearLayout row = new LinearLayout(this);
-        controls = row;
-        row.setOrientation(wide ? LinearLayout.HORIZONTAL : LinearLayout.VERTICAL);
-        page.addView(row, new LinearLayout.LayoutParams(-1, wide ? -1 : -2));
-        return row;
+    private MaterialButton action(LinearLayout parent, int label, Runnable run) {
+        MaterialButton view = new MaterialButton(this, null,
+            androidx.appcompat.R.attr.borderlessButtonStyle);
+        view.setText(label); view.setAllCaps(false); view.setGravity(Gravity.START | Gravity.CENTER_VERTICAL);
+        view.setOnClickListener(v -> run.run());
+        parent.addView(view, new LinearLayout.LayoutParams(-1, -2));
+        return view;
+    }
+    private LinearLayout section(String id, int title, String summary) {
+        LinearLayout group = card(page);
+        MaterialButton heading = action(group, title, () -> {});
+        heading.setIconGravity(MaterialButton.ICON_GRAVITY_END);
+        TextView subtitle = text(group, summary, 14);
+        if ("adb".equals(id)) adbSummary = subtitle;
+        LinearLayout body = new LinearLayout(this);
+        body.setOrientation(LinearLayout.VERTICAL);
+        group.addView(body);
+        Runnable render = () -> {
+            boolean expanded = expandedSections.contains(id);
+            body.setVisibility(expanded ? View.VISIBLE : View.GONE);
+            heading.setIconResource(expanded ? R.drawable.ic_expand_less : R.drawable.ic_expand_more);
+            ViewCompat.setStateDescription(heading, s(expanded ? R.string.expanded : R.string.collapsed));
+        };
+        heading.setOnClickListener(v -> {
+            if (!expandedSections.remove(id)) expandedSections.add(id);
+            render.run();
+        });
+        render.run();
+        return body;
     }
     @Override public void onCreate(Bundle state) {
         super.onCreate(state);
-        if (state != null) selectedTab = state.getInt("tab", TUNNEL);
-        wide = getResources().getConfiguration().screenWidthDp >= 600;
+        if (state != null) {
+            ArrayList<String> expanded = state.getStringArrayList("expanded_sections");
+            if (expanded != null) expandedSections.addAll(expanded);
+        }
         compact = getResources().getConfiguration().screenHeightDp < 650;
         WindowCompat.setDecorFitsSystemWindows(getWindow(), false);
         LinearLayout shell = new LinearLayout(this);
@@ -104,24 +127,19 @@ public final class MainActivity extends AppCompatActivity {
         TextView heading = text(shell, s(R.string.app_name), 20);
         heading.setTypeface(null, Typeface.BOLD);
         heading.setPadding(dp(20), dp(8), dp(20), 0);
-        page = new LinearLayout(this);
+        page = new LinearLayout(this) {
+            @Override protected void onMeasure(int widthSpec, int heightSpec) {
+                int width = Math.min(View.MeasureSpec.getSize(widthSpec), dp(720));
+                super.onMeasure(View.MeasureSpec.makeMeasureSpec(width, View.MeasureSpec.EXACTLY), heightSpec);
+            }
+        };
         page.setOrientation(LinearLayout.VERTICAL);
-        page.setGravity(Gravity.CENTER_VERTICAL);
-        page.setPadding(dp(12), 0, dp(12), 0);
-        shell.addView(page, new LinearLayout.LayoutParams(-1, 0, 1));
-        BottomNavigationView navigation = new BottomNavigationView(this);
-        navigation.setLabelVisibilityMode(com.google.android.material.navigation.NavigationBarView.LABEL_VISIBILITY_LABELED);
-        navigation.getMenu().add(0, TUNNEL, 0, R.string.tab_tunnel).setIcon(R.drawable.ic_tunnel);
-        navigation.getMenu().add(0, NETWORKS, 1, R.string.tab_networks).setIcon(R.drawable.ic_network);
-        navigation.getMenu().add(0, ADB, 2, R.string.tab_adb).setIcon(R.drawable.ic_adb);
-        navigation.getMenu().add(0, PREFERENCES, 3, R.string.tab_settings).setIcon(R.drawable.ic_settings);
-        navigation.setSelectedItemId(selectedTab);
-        navigation.setOnItemSelectedListener(item -> {
-            selectedTab = item.getItemId(); showPage(); return true;
-        });
-        shell.addView(navigation, new LinearLayout.LayoutParams(-1, -2));
+        page.setPadding(dp(12), 0, dp(12), dp(16));
+        scroller = new ScrollView(this);
+        scroller.setClipToPadding(false);
+        scroller.addView(page, new android.widget.FrameLayout.LayoutParams(-1, -2, Gravity.TOP | Gravity.CENTER_HORIZONTAL));
+        shell.addView(scroller, new LinearLayout.LayoutParams(-1, 0, 1));
         setContentView(shell);
-        page.addOnLayoutChangeListener((v, l, t, r, b, oldL, oldT, oldR, oldB) -> page.post(this::fitPage));
         ViewCompat.setOnApplyWindowInsetsListener(shell, (v, insets) -> {
             androidx.core.graphics.Insets bars = insets.getInsets(
                 WindowInsetsCompat.Type.systemBars() | WindowInsetsCompat.Type.displayCutout());
@@ -129,53 +147,26 @@ public final class MainActivity extends AppCompatActivity {
             return WindowInsetsCompat.CONSUMED;
         });
         showPage();
+        if (state != null) scroller.post(() -> scroller.scrollTo(0, state.getInt("scroll", 0)));
         if (Build.VERSION.SDK_INT >= 33
             && checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED)
             requestPermissions(new String[]{Manifest.permission.POST_NOTIFICATIONS}, 1);
     }
     @Override protected void onSaveInstanceState(Bundle state) {
-        state.putInt("tab", selectedTab);
+        state.putStringArrayList("expanded_sections", new ArrayList<>(expandedSections));
+        state.putInt("scroll", scroller.getScrollY());
         super.onSaveInstanceState(state);
     }
     private void showPage() {
-        controlsInDialog = false;
+        int scroll = scroller.getScrollY();
         page.removeAllViews(); status = null; toggle = null; wifiSummary = null; mobileSummary = null;
-        rootStatus = null; persistentAdb = null; wirelessHoldStatus = null;
-        switch (selectedTab) {
-            case NETWORKS: networksPage(); break;
-            case ADB: adbPage(); break;
-            case PREFERENCES: settingsPage(); break;
-            default: tunnelPage();
-        }
+        rootStatus = null; persistentAdb = null; wirelessHoldStatus = null; adbSummary = null;
+        tunnelPage(); accessSettings(); adbSettings(); advancedSettings();
         refresh();
-        page.post(this::fitPage);
-    }
-    private void fitPage() {
-        if (controlsInDialog || controls == null || page.getWidth() == 0 || page.getHeight() == 0) return;
-        int width = page.getWidth() - page.getPaddingLeft() - page.getPaddingRight();
-        int height = page.getHeight() - page.getPaddingTop() - page.getPaddingBottom();
-        controls.measure(View.MeasureSpec.makeMeasureSpec(width, View.MeasureSpec.EXACTLY),
-            View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED));
-        if (controls.getMeasuredHeight() <= height) return;
-        // Keep the main tabs fixed; reduced windows get their controls in a separate editor.
-        controlsInDialog = true;
-        LinearLayout content = controls;
-        page.removeView(content);
-        button(page, R.string.open_controls, () -> {
-            if (content.getParent() != null) return;
-            ScrollView scroll = new ScrollView(this);
-            scroll.addView(content, new ScrollView.LayoutParams(-1, -2));
-            androidx.appcompat.app.AlertDialog dialog = new androidx.appcompat.app.AlertDialog.Builder(this)
-                .setTitle(selectedTab == NETWORKS ? R.string.tab_networks : selectedTab == ADB
-                    ? R.string.tab_adb : selectedTab == PREFERENCES ? R.string.tab_settings : R.string.tab_tunnel)
-                .setView(scroll).setPositiveButton(R.string.close, null).create();
-            dialog.setOnDismissListener(d -> scroll.removeView(content));
-            dialog.show();
-        });
+        scroller.post(() -> scroller.scrollTo(0, scroll));
     }
     private void tunnelPage() {
-        LinearLayout row = groups(), primary = card(row);
-        text(primary, s(R.string.tunnel_intro), compact ? 16 : 20);
+        LinearLayout primary = card(page);
         toggle = new SwitchMaterial(this);
         toggle.setText(R.string.ssh_tunnel);
         primary.addView(toggle);
@@ -187,38 +178,60 @@ public final class MainActivity extends AppCompatActivity {
             refresh();
         });
         status = text(primary, "", 16);
-        status.setMaxLines(3);
-        status.setEllipsize(android.text.TextUtils.TruncateAt.END);
         status.setOnClickListener(v -> detail(R.string.status_details, UiText.status(this, SshdService.state)));
-        button(primary, R.string.status_details, () -> detail(R.string.status_details, UiText.status(this, SshdService.state)));
-        LinearLayout connection = wide ? card(row) : primary;
-        text(connection, "SSH :19191 → ADB :5555", 18);
-        button(connection, R.string.connect, () -> detail(R.string.connect,
-            s(R.string.connect_command) + "\n\n" + s(R.string.connect_help)));
-        button(connection, R.string.connection_details, () -> detail(R.string.connection_details,
-            networkDescription(null) + "\n\n" + hostKey()));
-        button(connection, R.string.address_check, this::checkAddress);
+        button(primary, R.string.connection_details, this::connectionDetails);
     }
-    private void networksPage() {
-        LinearLayout row = groups(), wifi = card(row), mobile = card(row);
-        text(wifi, s(R.string.wifi_networks), 20);
-        wifiSummary = text(wifi, "", 14); wifiSummary.setMaxLines(3);
-        button(wifi, R.string.edit_rules, () -> editNetwork(NetworkSettings.Kind.WIFI));
-        text(mobile, s(R.string.mobile_operators), 20);
-        mobileSummary = text(mobile, "", 14); mobileSummary.setMaxLines(3);
-        button(mobile, R.string.edit_rules, () -> editNetwork(NetworkSettings.Kind.MOBILE));
-        button(mobile, R.string.permissions, this::permissions);
+    private void connectionDetails() {
+        LinearLayout body = new LinearLayout(this); body.setOrientation(LinearLayout.VERTICAL);
+        body.setPadding(dp(20), dp(8), dp(20), dp(8));
+        text(body, s(R.string.connect_command) + "\n\n" + s(R.string.connect_help), 15).setTextIsSelectable(true);
+        text(body, networkDescription(null) + "\n\n" + hostKey(), 14).setTextIsSelectable(true);
+        action(body, R.string.address_check, this::checkAddress);
+        ScrollView scroll = new ScrollView(this); scroll.addView(body);
+        new androidx.appcompat.app.AlertDialog.Builder(this).setTitle(R.string.connection_details).setView(scroll)
+            .setPositiveButton(R.string.close, null).show();
     }
-    private void adbPage() {
-        LinearLayout row = groups(), root = card(row), wireless = card(row);
-        SwitchMaterial mode = new SwitchMaterial(this);
-        mode.setText(R.string.root_adb);
-        mode.setChecked(name.krot.adbsshtunnel.Settings.prefs(this).getBoolean("root_mode", false));
-        root.addView(mode);
-        mode.setOnCheckedChangeListener((v, selected) -> {
-            name.krot.adbsshtunnel.Settings.prefs(this).edit().putBoolean("root_mode", selected).commit();
-            if (name.krot.adbsshtunnel.Settings.enabled(this)) SshdService.select(this, true);
+    private void accessSettings() {
+        long count = Arrays.stream(name.krot.adbsshtunnel.Settings.keys(this).split("\n"))
+            .filter(line -> !line.trim().isEmpty()).count();
+        LinearLayout access = section("access", R.string.access_settings, getString(R.string.key_count, count));
+        action(access, R.string.wifi_networks, () -> editNetwork(NetworkSettings.Kind.WIFI));
+        wifiSummary = text(access, "", 14);
+        action(access, R.string.mobile_operators, () -> editNetwork(NetworkSettings.Kind.MOBILE));
+        mobileSummary = text(access, "", 14);
+        action(access, R.string.trusted_keys, this::editKeys);
+        action(access, R.string.permissions, this::permissions);
+    }
+    private boolean rootMode() {
+        return name.krot.adbsshtunnel.Settings.prefs(this).getBoolean("root_mode", false);
+    }
+    private void adbSettings() {
+        LinearLayout adb = section("adb", R.string.adb_mode, s(rootMode() ? R.string.root_adb : R.string.wireless_title));
+        Spinner mode = new Spinner(this);
+        mode.setContentDescription(s(R.string.adb_mode));
+        ArrayAdapter<String> choices = new ArrayAdapter<>(this, android.R.layout.simple_spinner_item,
+            new String[]{s(R.string.wireless_mode), s(R.string.root_adb)});
+        choices.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
+        mode.setAdapter(choices); mode.setSelection(rootMode() ? 1 : 0);
+        adb.addView(mode, new LinearLayout.LayoutParams(-1, dp(56)));
+        LinearLayout root = new LinearLayout(this); root.setOrientation(LinearLayout.VERTICAL); adb.addView(root);
+        LinearLayout wireless = new LinearLayout(this); wireless.setOrientation(LinearLayout.VERTICAL); adb.addView(wireless);
+        Runnable displayMode = () -> {
+            root.setVisibility(rootMode() ? View.VISIBLE : View.GONE);
+            wireless.setVisibility(rootMode() ? View.GONE : View.VISIBLE);
+        };
+        mode.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
+            @Override public void onItemSelected(AdapterView<?> parent, View view, int position, long id) {
+                boolean selected = position == 1;
+                if (selected != rootMode()) {
+                    name.krot.adbsshtunnel.Settings.prefs(MainActivity.this).edit().putBoolean("root_mode", selected).commit();
+                    if (name.krot.adbsshtunnel.Settings.enabled(MainActivity.this)) SshdService.select(MainActivity.this, true);
+                }
+                displayMode.run(); refresh();
+            }
+            @Override public void onNothingSelected(AdapterView<?> parent) {}
         });
+        displayMode.run();
         persistentAdb = new SwitchMaterial(this);
         persistentAdb.setText(R.string.persistent_adb);
         persistentAdb.setChecked(RootSettings.read(this).enabled);
@@ -228,12 +241,10 @@ public final class MainActivity extends AppCompatActivity {
             configureRoot(RootSettings.read(this).withEnabled(enabled));
         });
         rootStatus = text(root, s(R.string.root_unconfigured), 14);
-        rootStatus.setMaxLines(3); rootStatus.setEllipsize(android.text.TextUtils.TruncateAt.END);
-        button(root, R.string.root_helper, () -> configureRoot(RootSettings.read(this)));
-        button(root, R.string.direct_adb_rules, this::editDirectAdb);
-        button(root, R.string.root_status, this::showRootStatus);
-        button(root, R.string.connection_details, () -> detail(R.string.root_adb, s(R.string.root_help)));
-        text(wireless, s(R.string.wireless_title), 20);
+        action(root, R.string.root_helper, () -> configureRoot(RootSettings.read(this)));
+        action(root, R.string.direct_adb_rules, this::editDirectAdb);
+        action(root, R.string.root_status, this::showRootStatus);
+        action(root, R.string.adb_help, () -> detail(R.string.root_adb, s(R.string.root_help)));
         text(wireless, s(R.string.wireless_short), 15);
         SwitchMaterial hold = new SwitchMaterial(this);
         hold.setText(R.string.wireless_hold);
@@ -253,13 +264,12 @@ public final class MainActivity extends AppCompatActivity {
             refresh();
         });
         wirelessHoldStatus = text(wireless, s(WirelessDebuggingHold.status(this)), 14);
-        button(wireless, R.string.wireless_hold_setup_title,
-            () -> detail(R.string.wireless_hold, s(R.string.wireless_hold_setup)));
-        button(wireless, R.string.developer_options, () -> {
+        action(wireless, R.string.developer_options, () -> {
             try { startActivity(new Intent(Settings.ACTION_APPLICATION_DEVELOPMENT_SETTINGS)); }
             catch (ActivityNotFoundException e) { startActivity(new Intent(Settings.ACTION_SETTINGS)); }
         });
-        button(wireless, R.string.pairing_help, () -> detail(R.string.wireless_title, s(R.string.wireless_help)));
+        action(wireless, R.string.adb_help, () -> detail(R.string.wireless_title,
+            s(R.string.wireless_help) + "\n\n" + s(R.string.wireless_hold_setup)));
     }
     private void configureRoot(RootPolicy policy) {
         if (rootRequest) return;
@@ -276,7 +286,7 @@ public final class MainActivity extends AppCompatActivity {
                 result = e.getMessage(); success = false;
                 name.krot.adbsshtunnel.Settings.prefs(this).edit().putString("root_controller_error", result).apply();
             }
-            final String value = result; final boolean configured = success;
+            final String value = UiText.rootError(this, result); final boolean configured = success;
             runOnUiThread(() -> {
                 rootRequest = false;
                 if (isFinishing() || isDestroyed()) return;
@@ -295,7 +305,7 @@ public final class MainActivity extends AppCompatActivity {
             String result;
             try { result = RootHelper.status(); }
             catch (Exception e) { result = e.getMessage(); }
-            final String value = result;
+            final String value = UiText.rootError(this, result);
             runOnUiThread(() -> { if (!isFinishing() && !isDestroyed()) detail(R.string.root_status, value); });
         }, "root-status").start();
     }
@@ -327,18 +337,20 @@ public final class MainActivity extends AppCompatActivity {
         }));
         dialog.show();
     }
-    private void settingsPage() {
-        LinearLayout row = groups(), preferences = card(row), security = card(row);
-        button(preferences, R.string.language, this::language);
+    private void advancedSettings() {
+        LinearLayout preferences = section("advanced", R.string.advanced_settings, s(R.string.advanced_summary));
+        action(preferences, R.string.language, this::language);
         String selected = AppCompatDelegate.getApplicationLocales().toLanguageTags();
         text(preferences, selected.isEmpty() ? s(R.string.system_language) : ("ru".equals(selected) ? "Русский" : "English"), 15);
-        button(preferences, R.string.quick_settings, this::addTile);
-        button(preferences, R.string.connection_details, () -> detail(R.string.app_name, s(R.string.about)));
-        button(security, R.string.trusted_keys, this::editKeys);
-        long count = Arrays.stream(name.krot.adbsshtunnel.Settings.keys(this).split("\n"))
-            .filter(line -> !line.trim().isEmpty()).count();
-        text(security, getString(R.string.key_count, count), 15);
-        button(security, R.string.host_key, () -> detail(R.string.host_key, hostKey()));
+        action(preferences, R.string.quick_settings, this::addTile);
+        action(preferences, R.string.host_key, () -> detail(R.string.host_key, hostKey()));
+        action(preferences, R.string.status_details, () -> detail(R.string.status_details, UiText.status(this, SshdService.state)));
+        action(preferences, R.string.about_title, () -> detail(R.string.about_title,
+            getString(R.string.about_version, versionName()) + "\n\n" + s(R.string.about)));
+    }
+    private String versionName() {
+        try { return getPackageManager().getPackageInfo(getPackageName(), 0).versionName; }
+        catch (PackageManager.NameNotFoundException e) { return ""; }
     }
     private void language() {
         String tags = AppCompatDelegate.getApplicationLocales().toLanguageTags();
@@ -474,6 +486,7 @@ public final class MainActivity extends AppCompatActivity {
         networkMonitor.start();
     }
     private void refresh() {
+        if (adbSummary != null) adbSummary.setText(s(rootMode() ? R.string.root_adb : R.string.wireless_title));
         if (wirelessHoldStatus != null) wirelessHoldStatus.setText(WirelessDebuggingHold.status(this));
         if (status != null) status.setText(UiText.status(this, SshdService.state));
         if (toggle != null) toggle.setChecked(name.krot.adbsshtunnel.Settings.enabled(this));
@@ -481,10 +494,9 @@ public final class MainActivity extends AppCompatActivity {
         if (mobileSummary != null) mobileSummary.setText(summary(NetworkSettings.Kind.MOBILE));
         if (rootStatus != null && !rootRequest) {
             String error = name.krot.adbsshtunnel.Settings.prefs(this).getString("root_controller_error", "");
-            rootStatus.setText(!error.isEmpty() ? error : s(RootSettings.configured(this)
+            rootStatus.setText(!error.isEmpty() ? UiText.rootError(this, error) : s(RootSettings.configured(this)
                 ? R.string.root_configured : R.string.root_unconfigured));
         }
-        page.post(this::fitPage);
     }
     @Override protected void onStart() {
         super.onStart();

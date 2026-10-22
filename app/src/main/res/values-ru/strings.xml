@@ -1,4 +1,5 @@
 <resources>
+    <string name="root_su_missing">Команда su не найдена. Root недоступен: он может быть отключён, скрыт от приложения или не установлен. Для работы SSH без root выключите «Root ADB» и используйте беспроводную отладку.</string>
     <string name="app_name">ADB SSH Tunnel</string>
     <string name="tab_tunnel">Туннель</string>
     <string name="tab_networks">Сети</string>

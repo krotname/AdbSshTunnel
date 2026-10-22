@@ -1,4 +1,5 @@
 <resources>
+    <string name="root_su_missing">su was not found. Root is unavailable: it may be disabled, hidden from this app or not installed. To use SSH without root, turn off Root ADB and use Wireless Debugging.</string>
     <string name="app_name">ADB SSH Tunnel</string>
     <string name="tab_tunnel">Tunnel</string>
     <string name="tab_networks">Networks</string>

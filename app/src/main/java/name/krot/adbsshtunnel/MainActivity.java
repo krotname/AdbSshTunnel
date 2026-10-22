@@ -228,7 +228,6 @@ public final class MainActivity extends AppCompatActivity {
             configureRoot(RootSettings.read(this).withEnabled(enabled));
         });
         rootStatus = text(root, s(R.string.root_unconfigured), 14);
-        rootStatus.setMaxLines(3); rootStatus.setEllipsize(android.text.TextUtils.TruncateAt.END);
         button(root, R.string.root_helper, () -> configureRoot(RootSettings.read(this)));
         button(root, R.string.direct_adb_rules, this::editDirectAdb);
         button(root, R.string.root_status, this::showRootStatus);
@@ -276,7 +275,7 @@ public final class MainActivity extends AppCompatActivity {
                 result = e.getMessage(); success = false;
                 name.krot.adbsshtunnel.Settings.prefs(this).edit().putString("root_controller_error", result).apply();
             }
-            final String value = result; final boolean configured = success;
+            final String value = UiText.rootError(this, result); final boolean configured = success;
             runOnUiThread(() -> {
                 rootRequest = false;
                 if (isFinishing() || isDestroyed()) return;
@@ -295,7 +294,7 @@ public final class MainActivity extends AppCompatActivity {
             String result;
             try { result = RootHelper.status(); }
             catch (Exception e) { result = e.getMessage(); }
-            final String value = result;
+            final String value = UiText.rootError(this, result);
             runOnUiThread(() -> { if (!isFinishing() && !isDestroyed()) detail(R.string.root_status, value); });
         }, "root-status").start();
     }
@@ -481,7 +480,7 @@ public final class MainActivity extends AppCompatActivity {
         if (mobileSummary != null) mobileSummary.setText(summary(NetworkSettings.Kind.MOBILE));
         if (rootStatus != null && !rootRequest) {
             String error = name.krot.adbsshtunnel.Settings.prefs(this).getString("root_controller_error", "");
-            rootStatus.setText(!error.isEmpty() ? error : s(RootSettings.configured(this)
+            rootStatus.setText(!error.isEmpty() ? UiText.rootError(this, error) : s(RootSettings.configured(this)
                 ? R.string.root_configured : R.string.root_unconfigured));
         }
         page.post(this::fitPage);

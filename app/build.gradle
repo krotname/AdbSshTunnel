@@ -7,21 +7,38 @@ android {
         applicationId 'name.krot.adbsshtunnel'
         minSdk 30
         targetSdk 36
-        versionCode 8
-        versionName '2.0.0'
+        versionCode 9
+        versionName '2.0.1'
         ndk { abiFilters 'arm64-v8a', 'x86_64' }
         externalNativeBuild { cmake { arguments '-DANDROID_SUPPORT_FLEXIBLE_PAGE_SIZES=ON'; targets 'jni-dropbear', 'root-controller' } }
     }
+    buildFeatures { buildConfig true }
+    flavorDimensions += 'distribution'
+    productFlavors {
+        full {
+            dimension 'distribution'
+            buildConfigField 'boolean', 'WIRELESS_HOLD_SUPPORTED', 'true'
+            externalNativeBuild { cmake { arguments "-DROOT_CONTROLLER_ASSETS_DIR=${layout.buildDirectory.dir('generated/root-controller-assets/full').get().asFile}" } }
+        }
+        rustore {
+            dimension 'distribution'
+            buildConfigField 'boolean', 'WIRELESS_HOLD_SUPPORTED', 'false'
+            externalNativeBuild { cmake { arguments "-DROOT_CONTROLLER_ASSETS_DIR=${layout.buildDirectory.dir('generated/root-controller-assets/rustore').get().asFile}" } }
+        }
+    }
     externalNativeBuild { cmake { path file('CMakeLists.txt'); version '3.22.1' } }
-    sourceSets { main { assets.srcDir layout.buildDirectory.dir('generated/root-controller-assets') } }
+    sourceSets {
+        full { assets.srcDir layout.buildDirectory.dir('generated/root-controller-assets/full') }
+        rustore { assets.srcDir layout.buildDirectory.dir('generated/root-controller-assets/rustore') }
+    }
     compileOptions { sourceCompatibility JavaVersion.VERSION_17; targetCompatibility JavaVersion.VERSION_17 }
     packaging { jniLibs { useLegacyPackaging true } }
     buildTypes { release { minifyEnabled false } }
     lint { abortOnError true }
 }
 tasks.configureEach { task ->
-    if (task.name == 'mergeReleaseAssets') task.dependsOn 'externalNativeBuildRelease'
-    if (task.name == 'mergeDebugAssets') task.dependsOn 'externalNativeBuildDebug'
+    if (task.name ==~ /merge(Full|Rustore)(Release|Debug)Assets/)
+        task.dependsOn task.name.replace('merge', 'externalNativeBuild').replace('Assets', '')
 }
 dependencies {
     implementation 'androidx.appcompat:appcompat:1.7.1'

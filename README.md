@@ -3,7 +3,7 @@
 An Android SSH tunnel restricted to this phone’s local ADB. Key-only SSH,
 no shell, PTY, file transfer, agent/X11 or reverse forwarding.
 
-Package: `name.krot.adbsshtunnel`. Version: `2.0.0`. See the release profile and device acceptance before deployment.
+Package: `name.krot.adbsshtunnel`. Version: `2.0.1`. See the release profile and device acceptance before deployment.
 
 One main screen contains the tunnel switch, live status and connection information.
 Expand **Access: networks and keys**, **ADB mode**, or **More** when needed.
@@ -31,7 +31,8 @@ Android's current local Wireless Debugging connect port. It does not expose a ne
 plain ADB listener. A port change closes existing SSH connections; reconnect with
 the same command. Other forwarding targets remain rejected.
 
-Android can stop Wireless Debugging on reboot or network change. The optional
+Android can stop Wireless Debugging on reboot or network change. In the full
+GitHub APK, the optional
 **Keep Wireless Debugging enabled** switch observes Android's debugging setting
 and restores a previously enabled session on allowed Wi-Fi while non-root SSH
 is enabled. It requires a one-time grant from a trusted ADB computer:
@@ -47,6 +48,13 @@ stops recovery. Failed restoration backs off up to one minute; the app does not
 keep the CPU or Wi-Fi awake. Android can still require network confirmation or
 a new pairing after reboot. Keep pairing and SSH host-key verification separate.
 Pin the SSH host key using a physical USB forward before trusting WAN.
+
+The RuStore APK requires enabling Wireless Debugging manually again when Android
+turns it off. It omits the keep-enabled switch and `WRITE_SECURE_SETTINGS` permission.
+Both distributions retain pairing, automatic port discovery, network policies,
+SSH keys and Root ADB. They use the same package and release signing key, so
+installing either over the other preserves app data. Saved keep-enabled preferences
+are ignored in RuStore; the full APK can use them again.
 
 ## Network rules
 
@@ -87,14 +95,17 @@ CMake 3.22.1. JNI/Dropbear is compiled from Sshd4a commit
 git clone https://github.com/tfonteyn/Sshd4a.git vendor/Sshd4a
 git -C vendor/Sshd4a checkout --detach 897f9064a7279bff89538ec87729c43888f3b83d
 python3 tools/prepare-native.py
-gradle --offline --no-daemon testReleaseUnitTest lintRelease assembleRelease
+gradle --offline --no-daemon testFullReleaseUnitTest testRustoreReleaseUnitTest lintFullRelease lintRustoreRelease assembleFullRelease assembleRustoreRelease
+python3 tools/check-release-apks.py --aapt "$ANDROID_HOME/build-tools/36.0.0/aapt"
 ```
 
 Use an isolated unprivileged environment without user secrets for compilation.
 The Red ARC workflow uses the repository's persistent toolchain/dependency cache
 and its existing network isolation from home services. Sign
 the reviewed APK in a separate process. One permanent signing key is used for
-GitHub and every future store, including the Play App Signing key.
+GitHub and every future store, including the Play App Signing key. Publish the
+`full` APK as the full GitHub download and the `rustore` APK for RuStore. Each APK
+contains arm64-v8a and x86_64; CI checks both manifests and native payloads.
 
 ## Licenses
 

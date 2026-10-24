@@ -11,4 +11,7 @@ if [[ ! -x "$gradle_root/gradle-$gradle_version/bin/gradle" ]]; then
   unzip -q "$RUNNER_TEMP/gradle.zip" -d "$gradle_root"
 fi
 arc-cache gradle-prepare --user-home "$GRADLE_USER_HOME"
-"$gradle_root/gradle-$gradle_version/bin/gradle" --no-daemon --console plain testReleaseUnitTest lintRelease assembleRelease
+"$gradle_root/gradle-$gradle_version/bin/gradle" --no-daemon --console plain \
+  testFullReleaseUnitTest testRustoreReleaseUnitTest lintFullRelease lintRustoreRelease \
+  assembleFullRelease assembleRustoreRelease
+python3 tools/check-release-apks.py --aapt "$ANDROID_HOME/build-tools/36.0.0/aapt"

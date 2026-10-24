@@ -4,16 +4,23 @@
 |---|---|
 | Репозиторий | `krotname/AdbSshTunnel`, public, main |
 | Package | `name.krot.adbsshtunnel` |
-| Публичная версия | `app/build.gradle`: 2.0.0 (SemVer 2.0.0) |
-| Android versionCode | 8; отдельное техническое поле |
-| APK | Один APK с arm64-v8a и x86_64 |
+| Публичная версия | `app/build.gradle`: 2.0.1 (SemVer 2.0.0) |
+| Android versionCode | 9; отдельное техническое поле |
+| APK | Два варианта `full` и `rustore`, каждый с arm64-v8a и x86_64; package и ключ подписи общие |
 | Сборка | Red / Linux, изолированный непривилегированный ARC job с постоянным кэшем; Windows-сборки только White |
 | Toolchain | SDK 36 / JDK 21 / Java 17 / AGP 8.10.1 / Gradle 8.11.1 |
 | Native | Sshd4a `897f9064a7279bff89538ec87729c43888f3b83d`, NDK 27.2.12479018, CMake 3.22.1 |
-| Проверки | testReleaseUnitTest, lintRelease, assembleRelease, native restrictions, root-controller host tests, signature, devices |
+| Проверки | testFullReleaseUnitTest, testRustoreReleaseUnitTest, lintFullRelease, lintRustoreRelease, assembleFullRelease, assembleRustoreRelease, check-release-apks.py, native restrictions, root-controller host tests, signature, devices |
 | Подпись | Один постоянный RSA release key, PKCS12 в Vaultwarden |
 | Сертификат SHA-256 | `dc2e82bcffeb5bed6cdc2f0a6db12368a9437bd307deb79b7730f58dd523fee0` |
 | Канал выпуска | GitHub Release; состояние отдельных магазинов учитывается независимо в матрице публикаций |
+
+В RuStore передаётся только вариант `rustore` без `WRITE_SECURE_SETTINGS`:
+беспроводная отладка включается вручную, автоматическое определение порта сохранено.
+Полный GitHub-вариант `full` сохраняет удержание отладки. При смене варианта
+настройки и ключи сохраняются; приёмка проверяет обновление в обе стороны,
+отсутствие удержания и его инструкции в RuStore, включая сохранённые настройки
+полной версии. Полная версия проверяется отдельно с включённым удержанием.
 
 Подпись выполняется отдельно после проверки APK. Сборочные процессы не получают
 ключ. В Google Play передаётся тот же app signing key; отдельный ключ подписи

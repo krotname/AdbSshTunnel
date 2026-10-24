@@ -81,6 +81,8 @@
     <string name="adb_wireguard_iface">Trusted WireGuard interface</string>
     <string name="wireless_title">Wireless Debugging</string>
     <string name="wireless_short">Without root: pair this phone on a trusted computer.</string>
+    <string name="wireless_manual">Enable Wireless Debugging manually in Android Developer options. If Android turns it off, enable it again. The current connect port is discovered automatically.</string>
+    <string name="wireless_manual_help">Enable Wireless Debugging on Wi-Fi, then Pair device with pairing code. Run adb pair PHONE:PAIR_PORT on a trusted computer. The app discovers the connect port. If Android turns debugging off after a reboot or network change, enable it again in Developer options. Pairing and Android network confirmation remain required.</string>
     <string name="wireless_help">Enable Wireless Debugging on Wi-Fi, then Pair device with pairing code. Run adb pair PHONE:PAIR_PORT on a trusted computer. The app discovers the connect port. Keep-enabled can restore debugging on allowed Wi-Fi after Android turns it off.</string>
     <string name="wireless_hold">Keep Wireless Debugging enabled</string>
     <string name="wireless_hold_setup_title">Set up keep-enabled permission</string>

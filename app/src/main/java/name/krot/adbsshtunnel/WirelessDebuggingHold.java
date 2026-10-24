@@ -33,12 +33,15 @@ public final class WirelessDebuggingHold implements AutoCloseable {
             .getBoolean("wireless_hold_armed", false));
     }
     public static boolean permitted(Context context) {
-        return context.checkSelfPermission(PERMISSION) == PackageManager.PERMISSION_GRANTED;
+        return BuildConfig.WIRELESS_HOLD_SUPPORTED
+            && context.checkSelfPermission(PERMISSION) == PackageManager.PERMISSION_GRANTED;
     }
     public static boolean selected(Context context) {
-        return name.krot.adbsshtunnel.Settings.prefs(context).getBoolean("wireless_hold", false);
+        return BuildConfig.WIRELESS_HOLD_SUPPORTED
+            && name.krot.adbsshtunnel.Settings.prefs(context).getBoolean("wireless_hold", false);
     }
     public static int status(Context context) {
+        if (!BuildConfig.WIRELESS_HOLD_SUPPORTED) return R.string.wireless_manual;
         if (!selected(context)) return R.string.wireless_hold_off;
         if (!permitted(context)) return R.string.wireless_hold_permission;
         if (name.krot.adbsshtunnel.Settings.prefs(context).getBoolean("wireless_hold_rejected", false))
@@ -102,6 +105,7 @@ public final class WirelessDebuggingHold implements AutoCloseable {
         main.removeCallbacks(recheck);
         boolean enabled = Settings.Global.getInt(context.getContentResolver(), ADB_WIFI, 0) == 1;
         if (!Objects.equals(lastEnabled, enabled)) { lastEnabled = enabled; listener.accept(enabled); }
+        if (!BuildConfig.WIRELESS_HOLD_SUPPORTED) return;
         boolean selected = selected(context) && name.krot.adbsshtunnel.Settings.enabled(context);
         boolean before = policy.armed();
         // DEVELOPMENT_SETTINGS_ENABLED always reads as 0 for third-party apps.

@@ -13,5 +13,5 @@ fi
 arc-cache gradle-prepare --user-home "$GRADLE_USER_HOME"
 "$gradle_root/gradle-$gradle_version/bin/gradle" --no-daemon --console plain \
   testFullReleaseUnitTest testRustoreReleaseUnitTest lintFullRelease lintRustoreRelease \
-  assembleFullRelease assembleRustoreRelease
+  assembleFullRelease assembleRustoreRelease bundleRustoreRelease
 python3 tools/check-release-apks.py --aapt "$ANDROID_HOME/build-tools/36.0.0/aapt"

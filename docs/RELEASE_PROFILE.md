@@ -3,6 +3,7 @@
 | Поле | Значение |
 |---|---|
 | Репозиторий | `krotname/AdbSshTunnel`, public, main |
+| Страница продукта | Публичный репозиторий https://github.com/krotname/AdbSshTunnel; README — основной лендинг, отдельный сайт не используется |
 | Package | `name.krot.adbsshtunnel` |
 | Публичная версия | `app/build.gradle`: 2.0.1 (SemVer 2.0.0) |
 | Android versionCode | 9; отдельное техническое поле |

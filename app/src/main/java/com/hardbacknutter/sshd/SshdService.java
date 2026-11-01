@@ -18,7 +18,7 @@ public final class SshdService extends Service {
     static { System.loadLibrary("jni-dropbear"); }
     public static volatile boolean running;
     public static volatile String state = "Stopped";
-    private int serverPid;
+    private java.lang.Process serverProcess;
     private volatile int generation;
     private int discoveryGeneration;
     private boolean startupFailed;
@@ -33,10 +33,6 @@ public final class SshdService extends Service {
     private final Handler main = new Handler(Looper.getMainLooper());
     private final ExecutorService probes = Executors.newSingleThreadExecutor();
     private Future<?> rootCheck;
-    private native int start_sshd(String lib, String[] args, String conf, String home, String shell,
-                                  String env, boolean shellAccess, boolean publicKeys, boolean singleUsePasswords);
-    private native void kill(int pid);
-    private native int waitpid(int pid);
     public static native String getDropbearVersion();
     public static boolean select(Context c, boolean selected) {
         if (selected) {
@@ -197,16 +193,24 @@ public final class SshdService extends Service {
                     List<String> arguments = new ArrayList<>(Arrays.asList("sshd", "-e", "-R", "-F", "-s", "-k", "-T", "3", "-c", "/system/bin/false"));
                     arguments.add("-p"); arguments.add("127.0.0.1:19191");
                     for (String address : addresses) { arguments.add("-p"); arguments.add(address + ":19191"); }
-                    serverPid = start_sshd(getApplicationInfo().nativeLibraryDir, arguments.toArray(new String[0]), config.getPath(), getFilesDir().getPath(), "/system/bin/false", "ADB_TUNNEL_PORT=" + port, false, true, false);
-                    if (serverPid <= 0) throw new IOException("SSH startup failed");
-                    int startedPid = serverPid;
+                    List<String> command = new ArrayList<>(Arrays.asList(
+                        new File(getApplicationInfo().nativeLibraryDir, "libtunnel-server.so").getPath(),
+                        Integer.toString(android.os.Process.myPid()), getApplicationInfo().nativeLibraryDir,
+                        config.getPath(), getFilesDir().getPath(), Integer.toString(port)));
+                    command.addAll(arguments);
+                    java.lang.Process startedProcess = new ProcessBuilder(command)
+                        .redirectInput(new File("/dev/null")).redirectOutput(new File("/dev/null"))
+                        .redirectError(new File(config, "dropbear.err")).start();
+                    serverProcess = startedProcess;
                     CountDownLatch stopped = new CountDownLatch(1); serverStopped = stopped;
                     activePort = port;
                     Settings.prefs(this).edit().putInt("adb_port", port).apply();
                     new Thread(() -> {
-                        try { waitpid(startedPid); } finally { stopped.countDown(); }
+                        try { startedProcess.waitFor(); }
+                        catch (InterruptedException e) { Thread.currentThread().interrupt(); }
+                        finally { stopped.countDown(); }
                         main.post(() -> {
-                            if (serverPid == startedPid && token == generation) { serverPid = 0; failAndStop("SSH exited; enable the tunnel to retry"); }
+                            if (serverProcess == startedProcess && token == generation) { serverProcess = null; failAndStop("SSH exited; enable the tunnel to retry"); }
                         });
                     }, "ssh-exit").start();
                     probes.execute(() -> {
@@ -239,8 +243,8 @@ public final class SshdService extends Service {
     }
     private void stopNative() {
         ++generation; running = false; activePort = 0; pendingPort = 0;
-        if (serverPid > 0) {
-            kill(serverPid); serverPid = 0;
+        if (serverProcess != null) {
+            serverProcess.destroyForcibly(); serverProcess = null;
             try { serverStopped.await(1, TimeUnit.SECONDS); } catch (InterruptedException e) { Thread.currentThread().interrupt(); }
         }
         // Native parent-death guards close forwarding children with this server.

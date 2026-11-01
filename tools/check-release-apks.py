@@ -2,6 +2,7 @@
 import argparse
 from pathlib import Path
 import re
+import struct
 import subprocess
 import zipfile
 
@@ -32,9 +33,20 @@ def main():
         permission_sets[flavor] = permissions
         with zipfile.ZipFile(apk) as archive:
             for abi in ('arm64-v8a', 'x86_64'):
-                for name in (f'assets/{abi}/root-controller', f'lib/{abi}/libjni-dropbear.so'):
+                for name in (f'assets/{abi}/root-controller', f'lib/{abi}/libjni-dropbear.so',
+                             f'lib/{abi}/libtunnel-server.so'):
                     if archive.getinfo(name).file_size == 0:
                         raise SystemExit(f'{flavor}: empty native payload {name}')
+                name = f'lib/{abi}/libtunnel-server.so'
+                image = archive.read(name)
+                if (image[:6] != b'\x7fELF\x02\x01' or len(image) < 64
+                        or struct.unpack_from('<HH', image, 16) != (3, 183 if abi == 'arm64-v8a' else 62)):
+                    raise SystemExit(f'{flavor}: invalid native executable {name}')
+                phoff = struct.unpack_from('<Q', image, 32)[0]
+                phsize, phcount = struct.unpack_from('<HH', image, 54)
+                if not any(struct.unpack_from('<I', image, phoff + i * phsize)[0] == 3
+                           for i in range(phcount)):
+                    raise SystemExit(f'{flavor}: native daemon has no ELF interpreter: {name}')
         print(f'{flavor}: {version}, package and native payloads verified; keep-enabled={has_hold}')
     if permission_sets['full'] - {'android.permission.WRITE_SECURE_SETTINGS'} != permission_sets['rustore']:
         raise SystemExit('Unexpected permission differences between distributions')

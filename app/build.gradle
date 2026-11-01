@@ -7,10 +7,10 @@ android {
         applicationId 'name.krot.adbsshtunnel'
         minSdk 30
         targetSdk 36
-        versionCode 9
-        versionName '2.0.1'
+        versionCode 10
+        versionName '2.0.2'
         ndk { abiFilters 'arm64-v8a', 'x86_64' }
-        externalNativeBuild { cmake { arguments '-DANDROID_SUPPORT_FLEXIBLE_PAGE_SIZES=ON'; targets 'jni-dropbear', 'root-controller' } }
+        externalNativeBuild { cmake { arguments '-DANDROID_SUPPORT_FLEXIBLE_PAGE_SIZES=ON'; targets 'jni-dropbear', 'tunnel-server', 'root-controller' } }
     }
     buildFeatures { buildConfig true }
     flavorDimensions += 'distribution'
@@ -18,18 +18,24 @@ android {
         full {
             dimension 'distribution'
             buildConfigField 'boolean', 'WIRELESS_HOLD_SUPPORTED', 'true'
-            externalNativeBuild { cmake { arguments "-DROOT_CONTROLLER_ASSETS_DIR=${layout.buildDirectory.dir('generated/root-controller-assets/full').get().asFile}" } }
+            externalNativeBuild { cmake { arguments "-DROOT_CONTROLLER_ASSETS_DIR=${layout.buildDirectory.dir('generated/root-controller-assets/full').get().asFile}", "-DTUNNEL_JNI_DIR=${layout.buildDirectory.dir('generated/tunnel-jni/full').get().asFile}" } }
         }
         rustore {
             dimension 'distribution'
             buildConfigField 'boolean', 'WIRELESS_HOLD_SUPPORTED', 'false'
-            externalNativeBuild { cmake { arguments "-DROOT_CONTROLLER_ASSETS_DIR=${layout.buildDirectory.dir('generated/root-controller-assets/rustore').get().asFile}" } }
+            externalNativeBuild { cmake { arguments "-DROOT_CONTROLLER_ASSETS_DIR=${layout.buildDirectory.dir('generated/root-controller-assets/rustore').get().asFile}", "-DTUNNEL_JNI_DIR=${layout.buildDirectory.dir('generated/tunnel-jni/rustore').get().asFile}" } }
         }
     }
     externalNativeBuild { cmake { path file('CMakeLists.txt'); version '3.22.1' } }
     sourceSets {
-        full { assets.srcDir layout.buildDirectory.dir('generated/root-controller-assets/full') }
-        rustore { assets.srcDir layout.buildDirectory.dir('generated/root-controller-assets/rustore') }
+        full {
+            assets.srcDir layout.buildDirectory.dir('generated/root-controller-assets/full')
+            jniLibs.srcDir layout.buildDirectory.dir('generated/tunnel-jni/full')
+        }
+        rustore {
+            assets.srcDir layout.buildDirectory.dir('generated/root-controller-assets/rustore')
+            jniLibs.srcDir layout.buildDirectory.dir('generated/tunnel-jni/rustore')
+        }
     }
     compileOptions { sourceCompatibility JavaVersion.VERSION_17; targetCompatibility JavaVersion.VERSION_17 }
     packaging { jniLibs { useLegacyPackaging true } }
@@ -39,6 +45,8 @@ android {
 tasks.configureEach { task ->
     if (task.name ==~ /merge(Full|Rustore)(Release|Debug)Assets/)
         task.dependsOn task.name.replace('merge', 'externalNativeBuild').replace('Assets', '')
+    if (task.name ==~ /merge(Full|Rustore)(Release|Debug)JniLibFolders/)
+        task.dependsOn task.name.replace('merge', 'externalNativeBuild').replace('JniLibFolders', '')
 }
 dependencies {
     implementation 'androidx.appcompat:appcompat:1.7.1'

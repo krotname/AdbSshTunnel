@@ -12,7 +12,8 @@ public final class RootSetupReceiver extends BroadcastReceiver {
         new Thread(() -> {
             try {
                 RootPolicy policy = new RootPolicy(intent.getBooleanExtra("enabled", false),
-                    value(intent, "wifi_prefix"), value(intent, "hotspot_ssid"), value(intent, "wireguard_iface"));
+                    value(intent, "wifi_prefix"), value(intent, "hotspot_ssid"), value(intent, "wireguard_iface"),
+                    intent.getBooleanExtra("usb_enabled", RootSettings.read(context).usbEnabled));
                 RootHelper.configure(context, policy);
                 Settings.prefs(context).edit().remove("root_controller_error").apply();
             } catch (Exception e) {

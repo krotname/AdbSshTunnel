@@ -5,7 +5,8 @@
  *
  * CLI (exactly one argument): install/apply/maintain consume <=8192 bytes on stdin;
  * guard/check/enable/disable/status/boot/watch consume no policy arguments.
- * All five policy keys are mandatory, unique, order independent. Empty SSIDs
+ * Five legacy policy keys are mandatory; usb_enabled is optional (default off).
+ * Keys are unique and order independent. Empty SSIDs
  * disable that exception. Wi-Fi is a byte-prefix match; hotspot is exact.
  * Status is flat key=value; enabled/listener=-1 means unavailable evidence,
  * watcher_pid=0/watcher_version=none means no verified live lock holder.
@@ -28,7 +29,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-#define RC_VERSION "1.1.2"
+#define RC_VERSION "1.2.0"
 #define POLICY_MAX 8192u
 #define SSID_MAX 32u
 #define IFACE_MAX 15u
@@ -41,6 +42,7 @@
 
 struct policy {
     bool enabled;
+    bool usb_enabled;
     unsigned char wifi[SSID_MAX + 1], hotspot[SSID_MAX + 1];
     size_t wifi_len, hotspot_len;
     char wg[IFACE_MAX + 1];
@@ -51,7 +53,7 @@ struct text { char *data; size_t len, cap; bool ok; };
 
 static bool maintenance_reuses_policy(const struct policy *expected,
                                      const struct policy *stored, bool current_watch) {
-    return current_watch && expected->enabled == stored->enabled &&
+    return current_watch && expected->enabled == stored->enabled && expected->usb_enabled == stored->usb_enabled &&
         expected->wifi_len == stored->wifi_len && expected->hotspot_len == stored->hotspot_len &&
         !memcmp(expected->wifi, stored->wifi, expected->wifi_len) &&
         !memcmp(expected->hotspot, stored->hotspot, expected->hotspot_len) &&
@@ -136,6 +138,10 @@ static bool parse_policy(const char *bytes, size_t n, struct policy *out) {
             key = 2;
             if (strcmp(eq, "0") && strcmp(eq, "1")) return false;
             p.enabled = eq[0] == '1';
+        } else if (!strcmp(line, "usb_enabled")) {
+            key = 32;
+            if (strcmp(eq, "0") && strcmp(eq, "1")) return false;
+            p.usb_enabled = eq[0] == '1';
         } else if (!strcmp(line, "wifi_prefix")) {
             key = 4; if (!decode_ssid(eq, p.wifi, &p.wifi_len)) return false;
         } else if (!strcmp(line, "hotspot_ssid")) {
@@ -150,7 +156,7 @@ static bool parse_policy(const char *bytes, size_t n, struct policy *out) {
         if (!end) break;
         line = end + 1;
     }
-    if (seen != 31) return false;
+    if ((seen & 31) != 31) return false;
     *out = p;
     return true;
 }
@@ -162,7 +168,20 @@ static bool serialize_policy(const struct policy *p, char *out, size_t cap) {
     append(&b, "\nhotspot_ssid=");
     for (size_t i = 0; i < p->hotspot_len; ++i) append(&b, "%02x", (unsigned int)p->hotspot[i]);
     append(&b, "\nwireguard_iface=%s\n", p->wg);
+    if (p->usb_enabled) append(&b, "usb_enabled=1\n");
     return b.ok;
+}
+
+/* Settings values and the root-owned timeout snapshot never become shell text. */
+static bool timeout_value(const char *value) {
+    if (!strcmp(value, "null")) return true;
+    if (!*value) return false;
+    uint64_t n = 0;
+    for (const char *s = value; *s; ++s) {
+        if (*s < '0' || *s > '9' || n > ((uint64_t)INT64_MAX - (unsigned int)(*s - '0')) / 10) return false;
+        n = n * 10 + (unsigned int)(*s - '0');
+    }
+    return true;
 }
 
 static bool add_iface(struct interfaces *a, const char *s) {
@@ -1004,6 +1023,53 @@ static bool binder_ready(void) {
     return property_get("sys.boot_completed", boot, sizeof(boot)) && !strcmp(boot, "1");
 }
 
+static bool global_get(const char *key, char *out, size_t cap) {
+    const char *args[] = {"/system/bin/settings", "get", "global", key, NULL};
+    if (!command(args, NULL, out, cap)) return false;
+    size_t n = strlen(out);
+    while (n && (out[n - 1] == '\n' || out[n - 1] == '\r')) out[--n] = 0;
+    return timeout_value(out);
+}
+
+static bool global_set(const char *key, const char *value) {
+    char response[256], observed[64];
+    const char *put[] = {"/system/bin/settings", "put", "global", key, value, NULL};
+    const char *del[] = {"/system/bin/settings", "delete", "global", key, NULL};
+    return command(!strcmp(value, "null") ? del : put, NULL, response, sizeof(response)) &&
+        global_get(key, observed, sizeof(observed)) && !strcmp(observed, value);
+}
+
+/* Keep only Android-approved keys. Do not edit adb_keys, ro.adb.secure, USB
+ * functions or any authentication property. Android owns USB reconfiguration.
+ * Disabling the hold restores key expiry but never tears down current USB ADB.
+ */
+static bool reconcile_usb(int dir, const struct policy *p) {
+    const char *snapshot = "usb-timeout.saved";
+    char saved[64] = {0}, current[64];
+    int fd = openat(dir, snapshot, O_RDONLY | O_NOFOLLOW | O_CLOEXEC);
+    bool exists = fd >= 0;
+    if (!exists && errno != ENOENT) return false;
+    if (exists) {
+        struct stat state;
+        bool safe = file_ok(fd, 0600) && !fstat(fd, &state) && state.st_size > 0 && state.st_size < (off_t)sizeof(saved);
+        ssize_t n = safe ? read(fd, saved, (size_t)state.st_size) : -1;
+        close(fd);
+        if (!safe || n != state.st_size || memchr(saved, 0, (size_t)n) || !timeout_value(saved)) return false;
+    }
+    if (!p->usb_enabled && !exists) return true;
+    if (!binder_ready()) return false;
+    if (!global_get("adb_allowed_connection_time", current, sizeof(current))) return false;
+    if (!p->usb_enabled) {
+        /* Preserve a timeout changed by the owner after the hold stopped. */
+        if (!strcmp(current, "0") && !global_set("adb_allowed_connection_time", saved)) return false;
+        return !unlinkat(dir, snapshot, 0) && !fsync(dir);
+    }
+    if (!exists && !atomic_file(dir, snapshot, 0600, current, strlen(current), -1)) return false;
+    if (strcmp(current, "0") && !global_set("adb_allowed_connection_time", "0")) return false;
+    return global_get("adb_enabled", current, sizeof(current)) &&
+        (!strcmp(current, "1") || global_set("adb_enabled", "1"));
+}
+
 static bool firewall_family(bool ipv6, const char *rules, bool mutate) {
     const char *args[] = {ipv6 ? "/system/bin/ip6tables" : "/system/bin/iptables",
                           "-w", "2", "-t", "filter", "-S", NULL};
@@ -1227,7 +1293,10 @@ static int watch_loop(int dir, int watch_lock) {
                 bool ok = !changed || guard_policy(&p, false, true);
                 if (ok) ok = guard_policy(&p, binder_ready(), true);
                 if (!ok) (void)guard_failed();
-                else if (reconcile(&p, &retry) != RC_OK) log_failure("watch ADB not yet reconciled");
+                else {
+                    if (!reconcile_usb(dir, &p)) log_failure("watch USB ADB not yet reconciled");
+                    if (reconcile(&p, &retry) != RC_OK) log_failure("watch ADB not yet reconciled");
+                }
             }
             (void)flock(lock, LOCK_UN);
         }
@@ -1355,6 +1424,12 @@ static void report_status(int dir, const struct policy *p, bool loaded, bool gua
     printf("enabled=%d\nguarded=%d\nlistener=%d\nwatcher_pid=%ld\nwatcher_version=%s\nversion=%s\n",
            loaded ? (p->enabled ? 1 : 0) : -1, guarded ? 1 : 0, observed ? (ports.listener ? 1 : 0) : -1,
            running ? pid : 0, running ? version : "none", RC_VERSION);
+    char usb[64], timeout[64];
+    bool ready = binder_ready();
+    printf("usb_enabled=%d\nusb_adb=%s\nadb_key_timeout=%s\n",
+           loaded ? (p->usb_enabled ? 1 : 0) : -1,
+           ready && global_get("adb_enabled", usb, sizeof(usb)) ? usb : "unknown",
+           ready && global_get("adb_allowed_connection_time", timeout, sizeof(timeout)) ? timeout : "unknown");
 }
 
 int main(int argc, char **argv) {
@@ -1417,7 +1492,11 @@ int main(int argc, char **argv) {
     if (!result && (install || apply || enable || disable) && !save_policy(dir, &p)) {
         (void)shutdown_tcp(); result = RC_STORAGE;
     }
-    if (!result && !guard) result = reconcile(&p, NULL);
+    if (!result && !guard) {
+        bool usb_ok = reconcile_usb(dir, &p);
+        result = reconcile(&p, NULL);
+        if (!result && !usb_ok) result = RC_ADB;
+    }
     /* Guard is intentionally firewall-only; boot/install/apply/enable/disable
      * make sure the independently enabled root policy has a persistent watch.
      * Unchanged maintenance keeps the live guard while checking its current

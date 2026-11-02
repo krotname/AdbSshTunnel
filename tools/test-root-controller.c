@@ -318,7 +318,28 @@ static void dump_tests(void) {
     CHECK(!dump_filter_feed(&truncated, noise, sizeof(noise)));
 }
 
+static void usb_tests(void) {
+    struct policy p, q;
+    char encoded[1024];
+    CHECK(parse_policy(policy_text, strlen(policy_text), &p) && !p.usb_enabled);
+    q = p; q.usb_enabled = true;
+    CHECK(!maintenance_reuses_policy(&p, &q, true));
+    CHECK(serialize_policy(&q, encoded, sizeof(encoded)));
+    CHECK(parse_policy(encoded, strlen(encoded), &p) && p.usb_enabled);
+    CHECK(maintenance_reuses_policy(&p, &q, true));
+    const char *bad[] = {"usb_enabled=2\n", "usb_enabled=1\nusb_enabled=0\n", "usb_enabled=\n"};
+    for (size_t i = 0; i < sizeof(bad) / sizeof(bad[0]); ++i) {
+        snprintf(encoded, sizeof(encoded), "%s%s", policy_text, bad[i]);
+        CHECK(!parse_policy(encoded, strlen(encoded), &p));
+    }
+    CHECK(timeout_value("null") && timeout_value("0") && timeout_value("604800000"));
+    CHECK(timeout_value("9223372036854775807"));
+    CHECK(!timeout_value("9223372036854775808") && !timeout_value("-1"));
+    CHECK(!timeout_value("") && !timeout_value("0;id") && !timeout_value("0\n1"));
+}
+
 int main(void) {
+    usb_tests();
     parser_tests(); identity_tests(); firewall_tests(); lifecycle_tests(); dump_tests(); maintenance_tests();
     if (failures) { fprintf(stderr, "%d failed checks\n", failures); return 1; }
     puts("Policy, identity binding, firewall isolation, TLS output restriction and lifecycle checks passed");

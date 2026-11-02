@@ -22,6 +22,7 @@ forward one local port. The tunnel reaches only this phone's local ADB.
 |---|---|
 | Wireless Debugging without root | Pair with Android's ADB; the app discovers its current local connect port. |
 | Root ADB mode | Use the protected native root controller on a supported rooted device. |
+| Keep USB debugging (root) | Restore USB ADB and keep approved keys from expiring; new computers still need Android RSA confirmation. |
 | Key-only SSH | Keep the private key on your computer; import only its OpenSSH public key. |
 | Per-network access | Separate Wi-Fi SSID and mobile operator allowlists and blocklists; blocked entries win. |
 | Status at a glance | Tunnel switch, connection details, diagnostics and a Quick Settings tile. |

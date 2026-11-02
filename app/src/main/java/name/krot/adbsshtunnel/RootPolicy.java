@@ -5,9 +5,14 @@ import java.nio.charset.StandardCharsets;
 /** Direct ADB trust is independent of the SSH network policy. Empty trust is closed. */
 public final class RootPolicy {
     public final boolean enabled;
+    public final boolean usbEnabled;
     public final String wifiPrefix, hotspotSsid, wireguardInterface;
     public RootPolicy(boolean enabled, String wifiPrefix, String hotspotSsid, String wireguardInterface) {
+        this(enabled, wifiPrefix, hotspotSsid, wireguardInterface, false);
+    }
+    public RootPolicy(boolean enabled, String wifiPrefix, String hotspotSsid, String wireguardInterface, boolean usbEnabled) {
         this.enabled = enabled;
+        this.usbEnabled = usbEnabled;
         this.wifiPrefix = ssid(wifiPrefix);
         this.hotspotSsid = ssid(hotspotSsid);
         String iface = wireguardInterface.trim();
@@ -31,9 +36,13 @@ public final class RootPolicy {
     }
     public String encode() {
         return "version=1\nenabled=" + (enabled ? "1" : "0") + "\nwifi_prefix=" + hex(wifiPrefix)
-            + "\nhotspot_ssid=" + hex(hotspotSsid) + "\nwireguard_iface=" + wireguardInterface + "\n";
+            + "\nhotspot_ssid=" + hex(hotspotSsid) + "\nwireguard_iface=" + wireguardInterface
+            + "\nusb_enabled=" + (usbEnabled ? "1" : "0") + "\n";
     }
     public RootPolicy withEnabled(boolean value) {
-        return new RootPolicy(value, wifiPrefix, hotspotSsid, wireguardInterface);
+        return new RootPolicy(value, wifiPrefix, hotspotSsid, wireguardInterface, usbEnabled);
+    }
+    public RootPolicy withUsbEnabled(boolean value) {
+        return new RootPolicy(enabled, wifiPrefix, hotspotSsid, wireguardInterface, value);
     }
 }

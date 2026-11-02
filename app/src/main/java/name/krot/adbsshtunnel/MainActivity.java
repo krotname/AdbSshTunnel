@@ -32,7 +32,7 @@ public final class MainActivity extends AppCompatActivity {
     private TextView wirelessHoldStatus;
     private TextView adbSummary;
     private SwitchMaterial toggle;
-    private SwitchMaterial persistentAdb;
+    private SwitchMaterial persistentAdb, persistentUsb;
     private boolean rootRequest;
     private NetworkMonitor networkMonitor;
     private NetworkPolicyView editor;
@@ -160,7 +160,7 @@ public final class MainActivity extends AppCompatActivity {
     private void showPage() {
         int scroll = scroller.getScrollY();
         page.removeAllViews(); status = null; toggle = null; wifiSummary = null; mobileSummary = null;
-        rootStatus = null; persistentAdb = null; wirelessHoldStatus = null; adbSummary = null;
+        rootStatus = null; persistentAdb = null; persistentUsb = null; wirelessHoldStatus = null; adbSummary = null;
         tunnelPage(); accessSettings(); adbSettings(); advancedSettings();
         refresh();
         scroller.post(() -> scroller.scrollTo(0, scroll));
@@ -240,6 +240,15 @@ public final class MainActivity extends AppCompatActivity {
             if (enabled == RootSettings.read(this).enabled || rootRequest) return;
             configureRoot(RootSettings.read(this).withEnabled(enabled));
         });
+        persistentUsb = new SwitchMaterial(this);
+        persistentUsb.setText(R.string.persistent_usb);
+        persistentUsb.setChecked(RootSettings.read(this).usbEnabled);
+        root.addView(persistentUsb);
+        persistentUsb.setOnCheckedChangeListener((v, enabled) -> {
+            if (enabled == RootSettings.read(this).usbEnabled || rootRequest) return;
+            configureRoot(RootSettings.read(this).withUsbEnabled(enabled));
+        });
+        text(root, s(R.string.persistent_usb_help), 14);
         rootStatus = text(root, s(R.string.root_unconfigured), 14);
         action(root, R.string.root_helper, () -> configureRoot(RootSettings.read(this)));
         action(root, R.string.direct_adb_rules, this::editDirectAdb);
@@ -279,6 +288,7 @@ public final class MainActivity extends AppCompatActivity {
         if (rootRequest) return;
         rootRequest = true;
         if (persistentAdb != null) persistentAdb.setEnabled(false);
+        if (persistentUsb != null) persistentUsb.setEnabled(false);
         if (rootStatus != null) rootStatus.setText(R.string.checking_root);
         new Thread(() -> {
             String result; boolean success;
@@ -297,6 +307,10 @@ public final class MainActivity extends AppCompatActivity {
                 if (persistentAdb != null) {
                     persistentAdb.setChecked(RootSettings.read(this).enabled);
                     persistentAdb.setEnabled(true);
+                }
+                if (persistentUsb != null) {
+                    persistentUsb.setChecked(RootSettings.read(this).usbEnabled);
+                    persistentUsb.setEnabled(true);
                 }
                 if (rootStatus != null) rootStatus.setText(configured ? s(R.string.root_guard_verified) : value);
                 detail(R.string.root_status, value);
@@ -334,7 +348,7 @@ public final class MainActivity extends AppCompatActivity {
         dialog.setOnShowListener(ignored -> dialog.getButton(android.content.DialogInterface.BUTTON_POSITIVE).setOnClickListener(v -> {
             try {
                 RootPolicy updated = new RootPolicy(policy.enabled, String.valueOf(wifi.getText()),
-                    String.valueOf(hotspot.getText()), String.valueOf(wireguard.getText()));
+                    String.valueOf(hotspot.getText()), String.valueOf(wireguard.getText()), policy.usbEnabled);
                 if (rootRequest) return;
                 dialog.dismiss(); configureRoot(updated);
             } catch (IllegalArgumentException e) { message(e.getMessage()); }

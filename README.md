@@ -14,7 +14,7 @@ forward one local port. The tunnel reaches only this phone's local ADB.
 [Setup guide](docs/USAGE.md) ·
 [Ask a question](https://github.com/krotname/AdbSshTunnel/issues)
 
-**Android 11+** · **arm64-v8a / x86_64** · **Version 2.0.2** · **GPL-3.0**
+**Android 11+** · **arm64-v8a / x86_64** · **Version 2.1.0** · **GPL-3.0**
 
 ## What you get
 

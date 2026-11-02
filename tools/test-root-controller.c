@@ -259,10 +259,10 @@ static void firewall_tests(void) {
 }
 
 static void lifecycle_tests(void) {
-    CHECK(adb_action(true, true, "5555", "5555") == ADB_KEEP);
+    CHECK(adb_action(true, true, "5555", "5555") == ADB_RESTART);
     CHECK(adb_action(true, false, "5555", "5555") == ADB_RESTART);
     CHECK(adb_action(true, true, "-1", "5555") == ADB_RESTART);
-    CHECK(adb_action(true, true, "5555", "-1") == ADB_RESTART);
+    CHECK(adb_action(true, true, "5555", "-1") == ADB_KEEP);
     CHECK(adb_action(false, false, "-1", "-1") == ADB_KEEP);
     CHECK(adb_action(false, true, "-1", "-1") == ADB_RESTART);
     CHECK(adb_action(false, false, "5555", "-1") == ADB_RESTART);

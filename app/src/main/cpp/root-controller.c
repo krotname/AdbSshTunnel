@@ -28,7 +28,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-#define RC_VERSION "1.1.1"
+#define RC_VERSION "1.1.2"
 #define POLICY_MAX 8192u
 #define SSID_MAX 32u
 #define IFACE_MAX 15u
@@ -555,7 +555,7 @@ static bool render_restore(const struct snapshot *s, const char *rules, char *ou
 
 enum adb_action { ADB_KEEP, ADB_RESTART };
 static enum adb_action adb_action(bool enabled, bool listener, const char *service, const char *persist) {
-    if (enabled) return listener && !strcmp(service, "5555") && !strcmp(persist, "5555") ? ADB_KEEP : ADB_RESTART;
+    if (enabled) return listener && !strcmp(service, "5555") && !strcmp(persist, "-1") ? ADB_KEEP : ADB_RESTART;
     return !listener && !strcmp(service, "-1") && !strcmp(persist, "-1") ? ADB_KEEP : ADB_RESTART;
 }
 
@@ -1103,7 +1103,10 @@ static int reconcile(const struct policy *p, struct backoff *backoff) {
     if (healthy || !restart) return RC_OK;
     const char *value = p->enabled ? "5555" : "-1";
     bool a = !strcmp(service, value) || property_set("service.adb.tcp.port", value);
-    bool b = !strcmp(persist, value) || property_set("persist.adb.tcp.port", value);
+    /* Android starts adbd before a RAM-root controller can restore its guard.
+     * Persist TCP disabled; enable only the current boot after guard succeeds.
+     */
+    bool b = !strcmp(persist, "-1") || property_set("persist.adb.tcp.port", "-1");
     if (!a || !b || !property_set("ctl.restart", "adbd")) return RC_ADB;
     /* Restart requests are asynchronous; allow init a bounded settle period,
      * read back both properties and the real adbd-owned listening socket.

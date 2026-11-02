@@ -1,4 +1,6 @@
 <resources>
+    <string name="persistent_usb">Keep USB debugging for trusted computers</string>
+    <string name="persistent_usb_help">Root keeps USB debugging enabled and prevents approved ADB keys from expiring. New computers still require Android RSA confirmation. After reboot, recovery needs root and may need the first unlock. Turning this off restores the previous key timeout and leaves USB debugging as it is.</string>
     <string name="root_su_missing">su was not found. Root is unavailable: it may be disabled, hidden from this app or not installed. To use SSH without root, choose Wireless Debugging in ADB mode.</string>
     <string name="access_settings">Access: networks and keys</string>
     <string name="adb_mode">ADB mode</string>

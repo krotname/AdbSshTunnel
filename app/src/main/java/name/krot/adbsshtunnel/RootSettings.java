@@ -9,13 +9,14 @@ public final class RootSettings {
         android.content.SharedPreferences prefs = Settings.prefs(context);
         return new RootPolicy(prefs.getBoolean("root_adb_enabled", false),
             prefs.getString("adb_wifi_prefix", ""), prefs.getString("adb_hotspot_ssid", ""),
-            prefs.getString("adb_wireguard_iface", ""));
+            prefs.getString("adb_wireguard_iface", ""), prefs.getBoolean("root_usb_enabled", false));
     }
     public static boolean configured(Context context) {
         return Settings.prefs(context).getBoolean("root_controller_configured", false);
     }
     static void save(Context context, RootPolicy policy) throws IOException {
         if (!Settings.prefs(context).edit().putBoolean("root_controller_configured", true)
+                .putBoolean("root_usb_enabled", policy.usbEnabled)
                 .putBoolean("root_adb_enabled", policy.enabled).putString("adb_wifi_prefix", policy.wifiPrefix)
                 .putString("adb_hotspot_ssid", policy.hotspotSsid)
                 .putString("adb_wireguard_iface", policy.wireguardInterface).commit())

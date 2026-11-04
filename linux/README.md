@@ -8,7 +8,8 @@ from the Android APKs. Kali/Phosh ARM64 is the mobile test platform.
 
 Download the package for your architecture from the
 [Linux release](https://github.com/krotname/AdbSshTunnel/releases/tag/linux-v2.2.0).
-On Debian/Kali with GTK >= 4.12, Libadwaita >= 1.4 and Python >= 3.11:
+On Kali or a Debian-based system providing GTK >= 4.12, Libadwaita >= 1.4,
+Python >= 3.11 and `python3-asyncssh` >= 2.24 in its configured repositories:
 
 ```sh
 sudo apt install ./adb-ssh-tunnel_2.2.0_arm64.deb

@@ -1,5 +1,34 @@
 # Профиль выпуска ADB SSH Tunnel
 
+## Linux
+
+- Версия Linux: `linux/adb_ssh_tunnel/__init__.py`, **2.2.0**; Android остаётся 2.1.0.
+- App ID `name.krot.adbsshtunnel.linux`, Debian package `adb-ssh-tunnel`.
+- Артефакты: `adb-ssh-tunnel_2.2.0_arm64.deb` и `adb-ssh-tunnel_2.2.0_amd64.deb`,
+  `SHA256SUMS` и manifest с точным source SHA, версиями зависимостей и проверками.
+- Платформа: Debian/Kali/совместимые дистрибутивы, Python >=3.11,
+  GTK >=4.12, Libadwaita >=1.4, NetworkManager, user systemd, локальный SDK ADB.
+- Linux-пакет зависит от системных Python/GTK; встроенного native runtime нет.
+  APK-сертификат к Debian-пакету не применяется. Подлинность: GitHub HTTPS,
+  точный tag/commit и SHA-256 опубликованных файлов; отдельная подпись .deb не заявляется.
+- Сборка/тесты Linux — Black в отдельном контейнере без секретов, без привилегий,
+  с ограничением CPU/RAM/PID; Android/ARC-контракт сохраняется.
+- Linux CI выполняется последовательным шагом существующего ARC job с тем же
+  runner, кэшем и пределами; отдельный параллельный runner не добавляется.
+- Приёмка: реальные SSH auth/channel отрицательные проверки, разрешённый обмен
+  SDK ADB, сеть/отзыв ключа/остановка/конфликт порта, сохранение host key и настроек;
+  GUI RU/EN на Phosh 360 логических пикселей и обычном desktop.
+- ARM64 устанавливается и проверяется на Linux-телефоне по прямому поручению.
+  Пустой `adb devices` подтверждает серверный путь, не команды на Android.
+- Канал — GitHub Release `linux-v2.2.0`, отдельный от Android и `latest` APK.
+  Не делать Linux-only release latest для Android-ссылок.
+- Перед выпуском — Reversa 1.3.6, внешний review с проверкой SSH/auth, CI точного head,
+  самостоятельный diff, merge и main CI. Затем публичный readback/download,
+  проверка пакета, установка именно опубликованных bytes и версии.
+- Данные matrix writer и аппаратные идентификаторы — только в приватном checkpoint.
+
+## Android
+
 | Поле | Значение |
 |---|---|
 | Репозиторий | `krotname/AdbSshTunnel`, public, main |

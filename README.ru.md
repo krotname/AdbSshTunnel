@@ -1,5 +1,9 @@
 # ADB SSH Tunnel
 
+**Linux на телефоне или компьютере:** [Linux-версия](linux/README.md) — отдельный
+пакет с адаптивным интерфейсом GTK и ограниченным туннелем к локальному серверу
+ADB. Это сервер SDK в Linux, а не Android adbd; команды и ограничения отличаются.
+
 [English](README.md) · **Русский**
 
 ![ADB SSH Tunnel: доверенный компьютер → SSH с ключом → локальный ADB Android](docs/images/overview.svg)

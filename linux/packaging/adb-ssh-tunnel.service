@@ -1,0 +1,17 @@
+[Unit]
+Description=ADB SSH Tunnel (key-only, local ADB server only)
+After=network.target
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/adb-ssh-tunnel serve
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=10
+UMask=0077
+NoNewPrivileges=yes
+RestrictAddressFamilies=AF_INET AF_UNIX AF_NETLINK
+RuntimeDirectory=adb-ssh-tunnel
+
+[Install]
+WantedBy=default.target

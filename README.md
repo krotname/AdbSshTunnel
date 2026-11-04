@@ -16,6 +16,10 @@ forward one local port. The tunnel reaches only this phone's local ADB.
 
 **Android 11+** · **arm64-v8a / x86_64** · **Version 2.1.0** · **GPL-3.0**
 
+**Linux phone or desktop?** The [Linux edition](linux/README.md) uses a native,
+adaptive GTK interface and a restricted tunnel to the Linux SDK ADB server.
+It is a separate package from the Android APK; see its setup and limitations.
+
 ## What you get
 
 | Feature | How it helps |

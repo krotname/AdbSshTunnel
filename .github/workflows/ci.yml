@@ -56,6 +56,14 @@ jobs:
           git -C vendor/Sshd4a checkout --detach 897f9064a7279bff89538ec87729c43888f3b83d
           python3 tools/prepare-native.py
           python3 tools/check-source.py
+      - name: Linux SSH protocol regression and packages
+        shell: bash
+        run: |
+          python3 -m venv "$RUNNER_TEMP/adbssh-linux"
+          "$RUNNER_TEMP/adbssh-linux/bin/pip" install --disable-pip-version-check asyncssh==2.24.0
+          timeout 60 "$RUNNER_TEMP/adbssh-linux/bin/python" -m unittest discover -s linux/tests -v
+          "$RUNNER_TEMP/adbssh-linux/bin/python" linux/build-deb.py --arch arm64 --output linux/out
+          "$RUNNER_TEMP/adbssh-linux/bin/python" linux/build-deb.py --arch amd64 --output linux/out
       - name: Tests, lint and unsigned release
         shell: bash
         run: |
@@ -72,6 +80,7 @@ jobs:
           path: |
             app/build/outputs/apk/*/release/*-unsigned.apk
             app/build/outputs/bundle/rustoreRelease/*.aab
+            linux/out/*.deb
           if-no-files-found: error
           retention-days: 1
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2

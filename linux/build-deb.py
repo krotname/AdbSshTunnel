@@ -48,6 +48,11 @@ def build(architecture: str, output: Path):
             ' Adaptive GTK interface and per-network policies. No SSH shell or file transfer.\n',
             encoding='utf-8')
         package = output / f'adb-ssh-tunnel_{__version__}_{architecture}.deb'
+        # Debian control and payload permissions must not inherit the build umask.
+        root.chmod(0o755)
+        for path in root.rglob('*'):
+            executable = path == root / 'usr/bin/adb-ssh-tunnel'
+            path.chmod(0o755 if path.is_dir() or executable else 0o644)
         subprocess.run(['dpkg-deb', '--root-owner-group', '--build', str(root), str(package)], check=True)
         print(package)
 

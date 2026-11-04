@@ -8,6 +8,7 @@ import sys
 import tempfile
 import time
 import unittest
+from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import asyncssh
@@ -66,6 +67,36 @@ class GatewayTest(unittest.IsolatedAsyncioTestCase):
                        agent_path=None, config=None)
         options.update(changes)
         return await asyncio.wait_for(asyncssh.connect('127.0.0.1', **options), 5)
+
+    async def test_policy_change_precedes_stalled_adb_diagnostics(self):
+        connection = await self.connect()
+        entered = asyncio.Event()
+        release = asyncio.Event()
+        async def stalled_probe(_request):
+            entered.set()
+            await release.wait()
+            return ''
+        replacement = asyncssh.generate_private_key('ssh-ed25519')
+        self.cfg['keys'] = [replacement.export_public_key().decode()]
+        save_config(self.cfg, self.directory)
+        with patch('adb_ssh_tunnel.core.adb_request', stalled_probe):
+            tick = asyncio.create_task(self.gateway.tick())
+            try:
+                await asyncio.wait_for(entered.wait(), 1)
+                await asyncio.wait_for(connection.wait_closed(), 1)
+                self.assertIsNone(self.gateway.listener)
+                self.assertFalse(self.gateway.active)
+            finally:
+                release.set()
+                await tick
+            connection = await self.connect(client_keys=[replacement])
+            self.cfg['deny'] = [self.network.identity]
+            save_config(self.cfg, self.directory)
+            entered.clear()
+            state = await asyncio.wait_for(self.gateway.tick(), 1)
+            await asyncio.wait_for(connection.wait_closed(), 1)
+            self.assertEqual(state['state'], 'network_blocked')
+            self.assertFalse(entered.is_set())
 
     async def test_adb_server_exchange_and_empty_devices(self):
         async with await self.connect() as conn:

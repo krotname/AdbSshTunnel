@@ -291,23 +291,31 @@ class Gateway:
     async def tick(self):
         try:
             cfg = load_config(self.directory)
+            if self.signature and (not cfg['enabled'] or
+                                   self.signature[1:] != (cfg['port'], tuple(cfg['keys']))):
+                await self.close()
             network = await asyncio.to_thread(self.network_provider)
             state = {'network': network.identity, 'address': network.address,
                      'interface': network.interface, 'port': cfg['port'],
                      'fingerprint': self.key().get_fingerprint(), 'connections': len(self.connections)}
-            try:
-                version = await adb_request('host:version')
-                devices = await adb_request('host:devices-l')
-                state.update(adb='ready', adb_version=version, devices=devices.strip())
-            except (OSError, ValueError, asyncio.TimeoutError, asyncio.IncompleteReadError):
-                state.update(adb='unavailable', devices='')
             reason = ('stopped' if not cfg['enabled'] else 'no_keys' if not cfg['keys'] else
                       'network_blocked' if not permitted(cfg, network) else
-                      'adb_unavailable' if state['adb'] != 'ready' else 'listening')
+                      'listening')
             signature = (network, cfg['port'], tuple(cfg['keys'])) if reason == 'listening' else None
             if signature != self.signature or (signature and self.listener is None):
                 await self.close()
-                if signature:
+            # Enforce an observed policy change before unrelated ADB diagnostics.
+            state.update(adb='inactive', devices='')
+            if signature:
+                try:
+                    version = await adb_request('host:version')
+                    devices = await adb_request('host:devices-l')
+                    state.update(adb='ready', adb_version=version, devices=devices.strip())
+                except (OSError, ValueError, asyncio.TimeoutError, asyncio.IncompleteReadError):
+                    state.update(adb='unavailable')
+                    reason = 'adb_unavailable'
+                    await self.close()
+                if state['adb'] == 'ready' and self.listener is None:
                     self.public_keys = [asyncssh.import_public_key(k) for k in cfg['keys']]
                     self.listener = await asyncssh.create_server(
                         lambda: RestrictedSSH(self), network.address, cfg['port'],

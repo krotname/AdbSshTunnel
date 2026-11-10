@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- New main screen without scrolling: a large colour-coded on/off button with a plain-language status and four tiles (Connect, Networks & keys, ADB mode, More) that open bottom sheets. All previous functions and settings are unchanged.
+
 ## 1.1.2
 
 - Resolve Wireless Debugging advertisements one at a time, so other phones on the LAN cannot occupy a concurrent resolution and silently hide the local phone.

@@ -146,4 +146,18 @@
     <string name="listener_failed">SSH listener failed</string>
     <string name="ssh_exited">SSH exited; enable the tunnel to retry</string>
     <string name="discovery_error">ADB discovery unavailable: %1$s</string>
+    <string name="power_on_title">Tunnel is on</string>
+    <string name="power_off_title">Tunnel is off</string>
+    <string name="power_working_title">Getting ready…</string>
+    <string name="power_attention_title">Needs attention</string>
+    <string name="hint_turn_on">Tap the big button to turn it on</string>
+    <string name="hint_turn_off">Tap the big button to turn it off</string>
+    <string name="hint_attention">Tap the text above to see what to do</string>
+    <string name="hint_need_key">First add your SSH key in “Networks &amp; keys”</string>
+    <string name="state_on">On</string>
+    <string name="state_off">Off</string>
+    <string name="tile_access">Networks &amp; keys</string>
+    <string name="tile_connect_summary">Commands for your computer</string>
+    <string name="connect_step_title">Run on your computer</string>
+    <string name="network_now">Networks now</string>
 </resources>

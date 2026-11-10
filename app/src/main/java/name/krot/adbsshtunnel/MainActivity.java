@@ -1,14 +1,22 @@
 package name.krot.adbsshtunnel;
 
 import android.Manifest;
+import android.animation.ObjectAnimator;
+import android.animation.PropertyValuesHolder;
+import android.animation.ValueAnimator;
 import android.app.StatusBarManager;
 import android.content.*;
 import android.content.pm.PackageManager;
+import android.content.res.ColorStateList;
+import android.content.res.Configuration;
 import android.graphics.Typeface;
+import android.graphics.drawable.GradientDrawable;
 import android.graphics.drawable.Icon;
+import android.graphics.drawable.InsetDrawable;
 import android.net.Uri;
 import android.os.*;
 import android.provider.Settings;
+import android.text.TextUtils;
 import android.view.*;
 import android.widget.*;
 import androidx.appcompat.app.AppCompatActivity;
@@ -16,7 +24,12 @@ import androidx.appcompat.app.AppCompatDelegate;
 import androidx.core.content.ContextCompat;
 import androidx.core.os.LocaleListCompat;
 import androidx.core.view.*;
+import androidx.core.view.accessibility.AccessibilityNodeInfoCompat;
+import androidx.core.widget.NestedScrollView;
+import com.google.android.material.bottomsheet.BottomSheetBehavior;
+import com.google.android.material.bottomsheet.BottomSheetDialog;
 import com.google.android.material.button.MaterialButton;
+import com.google.android.material.button.MaterialButtonToggleGroup;
 import com.google.android.material.card.MaterialCardView;
 import com.google.android.material.switchmaterial.SwitchMaterial;
 import com.google.android.material.textfield.*;
@@ -25,13 +38,17 @@ import java.io.*;
 import java.util.*;
 
 public final class MainActivity extends AppCompatActivity {
-    private final Set<String> expandedSections = new HashSet<>();
-    private LinearLayout page;
-    private ScrollView scroller;
-    private TextView status, wifiSummary, mobileSummary, rootStatus;
-    private TextView wirelessHoldStatus;
-    private TextView adbSummary;
-    private SwitchMaterial toggle;
+    private static final String SHEET_CONNECT = "connect", SHEET_ACCESS = "access",
+        SHEET_ADB = "adb", SHEET_MORE = "more";
+    private String openSheet;
+    private BottomSheetDialog sheet;
+    private View halo, core;
+    private FrameLayout power;
+    private ValueAnimator pulse;
+    private UiText.Tone shownTone;
+    private TextView headline, status, hint;
+    private TextView accessTile, adbTile, moreTile;
+    private TextView wifiSummary, mobileSummary, rootStatus, wirelessHoldStatus, networkNow;
     private SwitchMaterial persistentAdb, persistentUsb;
     private boolean rootRequest;
     private NetworkMonitor networkMonitor;
@@ -44,6 +61,7 @@ public final class MainActivity extends AppCompatActivity {
 
     private int dp(int value) { return Math.round(value * getResources().getDisplayMetrics().density); }
     private String s(int resource) { return getString(resource); }
+    private int color(int resource) { return ContextCompat.getColor(this, resource); }
     private TextView text(LinearLayout parent, String value, int size) {
         TextView view = new TextView(this);
         view.setText(value); view.setTextSize(size);
@@ -52,9 +70,18 @@ public final class MainActivity extends AppCompatActivity {
         parent.addView(view, params);
         return view;
     }
+    private TextView label(LinearLayout parent, String value, int size, boolean bold, int colorRes, int lines) {
+        TextView view = new TextView(this);
+        view.setText(value); view.setTextSize(size); view.setTextColor(color(colorRes));
+        if (bold) view.setTypeface(Typeface.create("sans-serif-medium", Typeface.BOLD));
+        view.setMaxLines(lines); view.setEllipsize(TextUtils.TruncateAt.END);
+        parent.addView(view, new LinearLayout.LayoutParams(-1, -2));
+        return view;
+    }
     private MaterialButton button(LinearLayout parent, int label, Runnable action) {
         MaterialButton view = new MaterialButton(this);
         view.setText(label); view.setAllCaps(false);
+        view.setCornerRadius(dp(16));
         view.setOnClickListener(v -> action.run());
         parent.addView(view, new LinearLayout.LayoutParams(-1, -2));
         return view;
@@ -72,73 +99,77 @@ public final class MainActivity extends AppCompatActivity {
         new androidx.appcompat.app.AlertDialog.Builder(this).setTitle(title).setView(scroll)
             .setPositiveButton(R.string.close, null).show();
     }
-    private LinearLayout card(LinearLayout row) {
-        MaterialCardView card = new MaterialCardView(this);
-        card.setRadius(dp(20)); card.setCardElevation(0);
-        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(-1, -2);
-        params.setMargins(dp(4), dp(4), dp(4), dp(4));
-        row.addView(card, params);
-        LinearLayout inner = new LinearLayout(this);
-        inner.setOrientation(LinearLayout.VERTICAL);
-        inner.setPadding(dp(12), dp(compact ? 8 : 16), dp(12), dp(compact ? 8 : 16));
-        card.addView(inner);
-        return inner;
-    }
+    /** Large rounded row button used inside the bottom sheets. */
     private MaterialButton action(LinearLayout parent, int label, Runnable run) {
-        MaterialButton view = new MaterialButton(this, null,
-            androidx.appcompat.R.attr.borderlessButtonStyle);
-        view.setText(label); view.setAllCaps(false); view.setGravity(Gravity.START | Gravity.CENTER_VERTICAL);
+        MaterialButton view = new MaterialButton(this);
+        view.setText(label); view.setAllCaps(false); view.setTextSize(16);
+        view.setGravity(Gravity.START | Gravity.CENTER_VERTICAL);
+        view.setBackgroundTintList(ColorStateList.valueOf(color(R.color.row)));
+        view.setTextColor(color(R.color.ink));
+        view.setCornerRadius(dp(16)); view.setMinHeight(dp(56));
+        view.setPadding(dp(20), dp(12), dp(20), dp(12));
         view.setOnClickListener(v -> run.run());
-        parent.addView(view, new LinearLayout.LayoutParams(-1, -2));
+        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(-1, -2);
+        params.topMargin = dp(2); params.bottomMargin = dp(2);
+        parent.addView(view, params);
         return view;
     }
-    private LinearLayout section(String id, int title, String summary) {
-        LinearLayout group = card(page);
-        MaterialButton heading = action(group, title, () -> {});
-        heading.setIconGravity(MaterialButton.ICON_GRAVITY_END);
-        TextView subtitle = text(group, summary, 14);
-        if ("adb".equals(id)) adbSummary = subtitle;
-        LinearLayout body = new LinearLayout(this);
-        body.setOrientation(LinearLayout.VERTICAL);
-        group.addView(body);
-        Runnable render = () -> {
-            boolean expanded = expandedSections.contains(id);
-            body.setVisibility(expanded ? View.VISIBLE : View.GONE);
-            heading.setIconResource(expanded ? R.drawable.ic_expand_less : R.drawable.ic_expand_more);
-            ViewCompat.setStateDescription(heading, s(expanded ? R.string.expanded : R.string.collapsed));
-        };
-        heading.setOnClickListener(v -> {
-            if (!expandedSections.remove(id)) expandedSections.add(id);
-            render.run();
-        });
-        render.run();
-        return body;
+    private ImageView iconBubble(int icon, int tint, int background, int size) {
+        ImageView view = new ImageView(this);
+        view.setImageResource(icon);
+        view.setImageTintList(ColorStateList.valueOf(color(tint)));
+        GradientDrawable circle = new GradientDrawable();
+        circle.setShape(GradientDrawable.OVAL); circle.setColor(color(background));
+        view.setBackground(circle);
+        int padding = size / 4;
+        view.setPadding(padding, padding, padding, padding);
+        view.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
+        view.setLayoutParams(new LinearLayout.LayoutParams(size, size));
+        return view;
     }
+
     @Override public void onCreate(Bundle state) {
         super.onCreate(state);
-        if (state != null) {
-            ArrayList<String> expanded = state.getStringArrayList("expanded_sections");
-            if (expanded != null) expandedSections.addAll(expanded);
-        }
-        compact = getResources().getConfiguration().screenHeightDp < 650;
+        if (state != null) openSheet = state.getString("open_sheet");
+        Configuration config = getResources().getConfiguration();
+        compact = config.screenHeightDp < 650;
+        boolean wide = config.screenWidthDp > config.screenHeightDp && config.screenHeightDp < 600;
         WindowCompat.setDecorFitsSystemWindows(getWindow(), false);
-        LinearLayout shell = new LinearLayout(this);
-        shell.setOrientation(LinearLayout.VERTICAL);
-        TextView heading = text(shell, s(R.string.app_name), 20);
-        heading.setTypeface(null, Typeface.BOLD);
-        heading.setPadding(dp(20), dp(8), dp(20), 0);
-        page = new LinearLayout(this) {
+        FrameLayout shell = new FrameLayout(this);
+        shell.setBackgroundColor(color(R.color.screen));
+        int maxWidth = dp(wide ? 960 : 720);
+        LinearLayout content = new LinearLayout(this) {
             @Override protected void onMeasure(int widthSpec, int heightSpec) {
-                int width = Math.min(View.MeasureSpec.getSize(widthSpec), dp(720));
+                int width = Math.min(View.MeasureSpec.getSize(widthSpec), maxWidth);
                 super.onMeasure(View.MeasureSpec.makeMeasureSpec(width, View.MeasureSpec.EXACTLY), heightSpec);
             }
         };
-        page.setOrientation(LinearLayout.VERTICAL);
-        page.setPadding(dp(12), 0, dp(12), dp(16));
-        scroller = new ScrollView(this);
-        scroller.setClipToPadding(false);
-        scroller.addView(page, new android.widget.FrameLayout.LayoutParams(-1, -2, Gravity.TOP | Gravity.CENTER_HORIZONTAL));
-        shell.addView(scroller, new LinearLayout.LayoutParams(-1, 0, 1));
+        content.setOrientation(LinearLayout.VERTICAL);
+        int side = dp(compact ? 16 : 20);
+        content.setPadding(side, dp(compact ? 8 : 16), side, dp(compact ? 12 : 20));
+        shell.addView(content, new FrameLayout.LayoutParams(-1, -1, Gravity.CENTER_HORIZONTAL));
+        label(content, s(R.string.app_name), compact ? 20 : 24, true, R.color.ink, 1);
+        label(content, s(R.string.tunnel_intro), 14, false, R.color.muted, 2);
+        LinearLayout hero = new LinearLayout(this);
+        hero.setOrientation(LinearLayout.VERTICAL);
+        hero.setGravity(Gravity.CENTER_HORIZONTAL);
+        LinearLayout tiles = new LinearLayout(this);
+        tiles.setOrientation(LinearLayout.VERTICAL);
+        if (wide) {
+            LinearLayout row = new LinearLayout(this);
+            row.setOrientation(LinearLayout.HORIZONTAL);
+            row.setGravity(Gravity.CENTER_VERTICAL);
+            content.addView(row, new LinearLayout.LayoutParams(-1, 0, 1));
+            LinearLayout.LayoutParams heroParams = new LinearLayout.LayoutParams(0, -1, 1);
+            heroParams.rightMargin = dp(16);
+            row.addView(hero, heroParams);
+            row.addView(tiles, new LinearLayout.LayoutParams(0, -2, 1));
+        } else {
+            content.addView(hero, new LinearLayout.LayoutParams(-1, 0, 1));
+            content.addView(tiles, new LinearLayout.LayoutParams(-1, -2));
+        }
+        powerButton(hero);
+        tileGrid(tiles);
         setContentView(shell);
         ViewCompat.setOnApplyWindowInsetsListener(shell, (v, insets) -> {
             androidx.core.graphics.Insets bars = insets.getInsets(
@@ -146,55 +177,219 @@ public final class MainActivity extends AppCompatActivity {
             shell.setPadding(bars.left, bars.top, bars.right, bars.bottom);
             return WindowInsetsCompat.CONSUMED;
         });
-        showPage();
-        if (state != null) scroller.post(() -> scroller.scrollTo(0, state.getInt("scroll", 0)));
+        refresh();
+        if (openSheet != null) showSheet(openSheet);
         if (Build.VERSION.SDK_INT >= 33
             && checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED)
             requestPermissions(new String[]{Manifest.permission.POST_NOTIFICATIONS}, 1);
     }
     @Override protected void onSaveInstanceState(Bundle state) {
-        state.putStringArrayList("expanded_sections", new ArrayList<>(expandedSections));
-        state.putInt("scroll", scroller.getScrollY());
+        state.putString("open_sheet", openSheet);
         super.onSaveInstanceState(state);
     }
-    private void showPage() {
-        int scroll = scroller.getScrollY();
-        page.removeAllViews(); status = null; toggle = null; wifiSummary = null; mobileSummary = null;
-        rootStatus = null; persistentAdb = null; persistentUsb = null; wirelessHoldStatus = null; adbSummary = null;
-        tunnelPage(); accessSettings(); adbSettings(); advancedSettings();
-        refresh();
-        scroller.post(() -> scroller.scrollTo(0, scroll));
+    @Override protected void onDestroy() {
+        if (pulse != null) { pulse.cancel(); pulse = null; }
+        if (sheet != null) { sheet.setOnDismissListener(null); sheet.dismiss(); sheet = null; }
+        super.onDestroy();
     }
-    private void tunnelPage() {
-        LinearLayout primary = card(page);
-        toggle = new SwitchMaterial(this);
-        toggle.setText(R.string.ssh_tunnel);
-        primary.addView(toggle);
-        toggle.setOnCheckedChangeListener((v, checked) -> {
-            if (checked == name.krot.adbsshtunnel.Settings.enabled(this)) return;
-            try {
-                if (!SshdService.select(this, checked)) { message(UiText.status(this, SshdService.state)); toggle.setChecked(false); }
-            } catch (Exception e) { message(e.getMessage()); toggle.setChecked(false); }
-            refresh();
+
+    /** One big round on/off button that fills the free space without scrolling. */
+    private void powerButton(LinearLayout hero) {
+        FrameLayout stage = new FrameLayout(this);
+        hero.addView(stage, new LinearLayout.LayoutParams(-1, 0, 1));
+        int cap = dp(compact ? 196 : 232);
+        power = new FrameLayout(this) {
+            @Override protected void onMeasure(int widthSpec, int heightSpec) {
+                int size = Math.min(Math.min(View.MeasureSpec.getSize(widthSpec),
+                    View.MeasureSpec.getSize(heightSpec)), cap);
+                int spec = View.MeasureSpec.makeMeasureSpec(size, View.MeasureSpec.EXACTLY);
+                super.onMeasure(spec, spec);
+            }
+        };
+        stage.addView(power, new FrameLayout.LayoutParams(-1, -1, Gravity.CENTER));
+        halo = new View(this);
+        power.addView(halo, new FrameLayout.LayoutParams(-1, -1));
+        core = new View(this);
+        core.setElevation(dp(6));
+        power.addView(core, new FrameLayout.LayoutParams(-1, -1));
+        ImageView icon = new ImageView(this);
+        icon.setImageDrawable(new InsetDrawable(ContextCompat.getDrawable(this, R.drawable.ic_power), 0.33f));
+        icon.setImageTintList(ColorStateList.valueOf(color(R.color.on_power)));
+        icon.setScaleType(ImageView.ScaleType.FIT_XY);
+        icon.setElevation(dp(7));
+        icon.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
+        power.addView(icon, new FrameLayout.LayoutParams(-1, -1));
+        power.setClickable(true); power.setFocusable(true);
+        power.setContentDescription(s(R.string.ssh_tunnel));
+        power.setOnClickListener(v -> {
+            v.performHapticFeedback(HapticFeedbackConstants.CONTEXT_CLICK);
+            setTunnel(!name.krot.adbsshtunnel.Settings.enabled(this));
         });
-        status = text(primary, "", 16);
+        ViewCompat.setAccessibilityDelegate(power, new AccessibilityDelegateCompat() {
+            @Override public void onInitializeAccessibilityNodeInfo(View host, AccessibilityNodeInfoCompat info) {
+                super.onInitializeAccessibilityNodeInfo(host, info);
+                info.setClassName(Switch.class.getName());
+                info.setCheckable(true);
+                info.setChecked(name.krot.adbsshtunnel.Settings.enabled(MainActivity.this));
+            }
+        });
+        headline = label(hero, "", compact ? 22 : 26, true, R.color.ink, 1);
+        headline.setGravity(Gravity.CENTER);
+        ((LinearLayout.LayoutParams) headline.getLayoutParams()).topMargin = dp(compact ? 8 : 16);
+        status = label(hero, "", 15, false, R.color.muted, 2);
+        status.setGravity(Gravity.CENTER);
+        status.setPadding(dp(8), dp(4), dp(8), dp(4));
         status.setOnClickListener(v -> detail(R.string.status_details, UiText.status(this, SshdService.state)));
-        button(primary, R.string.connection_details, this::connectionDetails);
+        hint = label(hero, "", 13, false, R.color.muted, 2);
+        hint.setGravity(Gravity.CENTER);
+        ((LinearLayout.LayoutParams) hint.getLayoutParams()).bottomMargin = dp(compact ? 8 : 16);
     }
-    private void connectionDetails() {
-        LinearLayout body = new LinearLayout(this); body.setOrientation(LinearLayout.VERTICAL);
-        body.setPadding(dp(20), dp(8), dp(20), dp(8));
-        text(body, s(R.string.connect_command) + "\n\n" + s(R.string.connect_help), 15).setTextIsSelectable(true);
-        text(body, networkDescription(null) + "\n\n" + hostKey(), 14).setTextIsSelectable(true);
+    private void setTunnel(boolean checked) {
+        if (checked != name.krot.adbsshtunnel.Settings.enabled(this)) {
+            try {
+                if (!SshdService.select(this, checked)) message(UiText.status(this, SshdService.state));
+            } catch (Exception e) { message(e.getMessage()); }
+        }
+        refresh();
+    }
+    private void paintPower(UiText.Tone tone) {
+        if (power == null || tone == shownTone) return;
+        shownTone = tone;
+        int start, end, text;
+        switch (tone) {
+            case READY: start = R.color.power_ready_start; end = R.color.power_ready_end; text = R.color.tone_ready; break;
+            case WORKING: start = R.color.power_working_start; end = R.color.power_working_end; text = R.color.tone_working; break;
+            case ATTENTION: start = R.color.power_attention_start; end = R.color.power_attention_end; text = R.color.tone_attention; break;
+            default: start = R.color.power_off_start; end = R.color.power_off_end; text = R.color.tone_off;
+        }
+        GradientDrawable fill = new GradientDrawable(GradientDrawable.Orientation.TL_BR,
+            new int[]{color(start), color(end)});
+        fill.setShape(GradientDrawable.OVAL);
+        core.setBackground(new InsetDrawable(fill, 0.1f));
+        GradientDrawable ring = new GradientDrawable();
+        ring.setShape(GradientDrawable.OVAL);
+        ring.setColor((color(end) & 0x00FFFFFF) | 0x33000000);
+        halo.setBackground(ring);
+        headline.setTextColor(color(text));
+        if (pulse != null) { pulse.cancel(); pulse = null; }
+        halo.setScaleX(1f); halo.setScaleY(1f); halo.setAlpha(1f);
+        if (tone == UiText.Tone.READY || tone == UiText.Tone.WORKING) {
+            pulse = ObjectAnimator.ofPropertyValuesHolder(halo,
+                PropertyValuesHolder.ofFloat(View.SCALE_X, 0.9f, 1f),
+                PropertyValuesHolder.ofFloat(View.SCALE_Y, 0.9f, 1f),
+                PropertyValuesHolder.ofFloat(View.ALPHA, 1f, 0.35f));
+            pulse.setDuration(tone == UiText.Tone.READY ? 1600 : 700);
+            pulse.setRepeatMode(ValueAnimator.REVERSE);
+            pulse.setRepeatCount(ValueAnimator.INFINITE);
+            pulse.start();
+        }
+    }
+
+    /** Four big colourful tiles: every former section is one tap away. */
+    private void tileGrid(LinearLayout tiles) {
+        LinearLayout top = new LinearLayout(this), bottom = new LinearLayout(this);
+        top.setOrientation(LinearLayout.HORIZONTAL); bottom.setOrientation(LinearLayout.HORIZONTAL);
+        tiles.addView(top, new LinearLayout.LayoutParams(-1, -2));
+        tiles.addView(bottom, new LinearLayout.LayoutParams(-1, -2));
+        tile(top, R.drawable.ic_link, R.color.tile_blue, R.color.tile_blue_bg,
+            R.string.connection_details, () -> showSheet(SHEET_CONNECT)).setText(R.string.tile_connect_summary);
+        accessTile = tile(top, R.drawable.ic_network, R.color.tile_green, R.color.tile_green_bg,
+            R.string.tile_access, () -> showSheet(SHEET_ACCESS));
+        adbTile = tile(bottom, R.drawable.ic_adb, R.color.tile_violet, R.color.tile_violet_bg,
+            R.string.adb_mode, () -> showSheet(SHEET_ADB));
+        moreTile = tile(bottom, R.drawable.ic_settings, R.color.tile_orange, R.color.tile_orange_bg,
+            R.string.advanced_settings, () -> showSheet(SHEET_MORE));
+    }
+    private TextView tile(LinearLayout row, int icon, int tint, int background, int title, Runnable open) {
+        MaterialCardView card = new MaterialCardView(this);
+        card.setRadius(dp(24)); card.setCardElevation(0); card.setStrokeWidth(0);
+        card.setCardBackgroundColor(color(background));
+        card.setClickable(true); card.setFocusable(true);
+        card.setOnClickListener(v -> open.run());
+        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(0, -2, 1);
+        params.setMargins(dp(5), dp(5), dp(5), dp(5));
+        row.addView(card, params);
+        LinearLayout inner = new LinearLayout(this);
+        inner.setOrientation(LinearLayout.VERTICAL);
+        int pad = dp(compact ? 12 : 16);
+        inner.setPadding(pad, pad, pad, pad);
+        card.addView(inner);
+        inner.addView(iconBubble(icon, background, tint, dp(compact ? 36 : 44)));
+        TextView name = label(inner, s(title), compact ? 15 : 17, true, R.color.ink, 1);
+        ((LinearLayout.LayoutParams) name.getLayoutParams()).topMargin = dp(compact ? 6 : 10);
+        return label(inner, "", 13, false, R.color.muted, 1);
+    }
+
+    /** Bottom sheet with a friendly header; long content scrolls inside the sheet only. */
+    private LinearLayout sheetBody(String id, int icon, int tint, int background, int title) {
+        if (sheet != null) { sheet.setOnDismissListener(null); sheet.dismiss(); }
+        clearSheetViews();
+        BottomSheetDialog dialog = new BottomSheetDialog(this);
+        LinearLayout body = new LinearLayout(this);
+        body.setOrientation(LinearLayout.VERTICAL);
+        body.setPadding(dp(20), dp(8), dp(20), dp(24));
+        LinearLayout header = new LinearLayout(this);
+        header.setOrientation(LinearLayout.HORIZONTAL);
+        header.setGravity(Gravity.CENTER_VERTICAL);
+        header.addView(iconBubble(icon, background, tint, dp(44)));
+        TextView name = new TextView(this);
+        name.setText(title); name.setTextSize(22); name.setTextColor(color(R.color.ink));
+        name.setTypeface(Typeface.create("sans-serif-medium", Typeface.BOLD));
+        name.setPadding(dp(14), 0, 0, 0);
+        ViewCompat.setAccessibilityHeading(name, true);
+        header.addView(name, new LinearLayout.LayoutParams(0, -2, 1));
+        LinearLayout.LayoutParams headerParams = new LinearLayout.LayoutParams(-1, -2);
+        headerParams.bottomMargin = dp(16);
+        body.addView(header, headerParams);
+        NestedScrollView scroll = new NestedScrollView(this);
+        scroll.addView(body);
+        dialog.setContentView(scroll);
+        dialog.getBehavior().setState(BottomSheetBehavior.STATE_EXPANDED);
+        dialog.getBehavior().setSkipCollapsed(true);
+        dialog.setOnDismissListener(d -> {
+            if (sheet != dialog) return;
+            sheet = null; openSheet = null; clearSheetViews();
+        });
+        sheet = dialog; openSheet = id;
+        return body;
+    }
+    private void clearSheetViews() {
+        wifiSummary = null; mobileSummary = null; rootStatus = null; wirelessHoldStatus = null;
+        networkNow = null; persistentAdb = null; persistentUsb = null;
+    }
+    private void showSheet(String id) {
+        switch (id) {
+            case SHEET_CONNECT: connectSheet(); break;
+            case SHEET_ACCESS: accessSettings(); break;
+            case SHEET_ADB: adbSettings(); break;
+            case SHEET_MORE: advancedSettings(); break;
+            default: openSheet = null; return;
+        }
+        refresh();
+        if (sheet != null) sheet.show();
+    }
+    private void connectSheet() {
+        LinearLayout body = sheetBody(SHEET_CONNECT, R.drawable.ic_link, R.color.tile_blue,
+            R.color.tile_blue_bg, R.string.connection_details);
+        label(body, s(R.string.connect_step_title), 15, true, R.color.ink, 2);
+        TextView command = text(body, s(R.string.connect_command), 14);
+        command.setTypeface(Typeface.MONOSPACE); command.setTextIsSelectable(true);
+        command.setTextColor(color(R.color.ink));
+        GradientDrawable box = new GradientDrawable();
+        box.setColor(color(R.color.code)); box.setCornerRadius(dp(14));
+        command.setBackground(box);
+        command.setPadding(dp(14), dp(12), dp(14), dp(12));
+        ((LinearLayout.LayoutParams) command.getLayoutParams()).topMargin = dp(8);
+        text(body, s(R.string.connect_help), 14).setTextIsSelectable(true);
+        label(body, s(R.string.network_now), 15, true, R.color.ink, 2);
+        networkNow = text(body, "", 14);
+        networkNow.setTextIsSelectable(true);
+        text(body, hostKey(), 13).setTextIsSelectable(true);
         action(body, R.string.address_check, this::checkAddress);
-        ScrollView scroll = new ScrollView(this); scroll.addView(body);
-        new androidx.appcompat.app.AlertDialog.Builder(this).setTitle(R.string.connection_details).setView(scroll)
-            .setPositiveButton(R.string.close, null).show();
     }
     private void accessSettings() {
-        long count = Arrays.stream(name.krot.adbsshtunnel.Settings.keys(this).split("\n"))
-            .filter(line -> !line.trim().isEmpty()).count();
-        LinearLayout access = section("access", R.string.access_settings, getString(R.string.key_count, count));
+        LinearLayout access = sheetBody(SHEET_ACCESS, R.drawable.ic_network, R.color.tile_green,
+            R.color.tile_green_bg, R.string.access_settings);
         action(access, R.string.wifi_networks, () -> editNetwork(NetworkSettings.Kind.WIFI));
         wifiSummary = text(access, "", 14);
         action(access, R.string.mobile_operators, () -> editNetwork(NetworkSettings.Kind.MOBILE));
@@ -202,34 +397,49 @@ public final class MainActivity extends AppCompatActivity {
         action(access, R.string.trusted_keys, this::editKeys);
         action(access, R.string.permissions, this::permissions);
     }
+    private long keyCount() {
+        return Arrays.stream(name.krot.adbsshtunnel.Settings.keys(this).split("\n"))
+            .filter(line -> !line.trim().isEmpty()).count();
+    }
     private boolean rootMode() {
         return name.krot.adbsshtunnel.Settings.prefs(this).getBoolean("root_mode", false);
     }
+    private MaterialButton modeChoice(MaterialButtonToggleGroup group, int label) {
+        MaterialButton choice = new MaterialButton(this, null,
+            com.google.android.material.R.attr.materialButtonOutlinedStyle);
+        choice.setId(View.generateViewId());
+        choice.setText(label); choice.setAllCaps(false); choice.setTextSize(15);
+        choice.setMinHeight(dp(52));
+        group.addView(choice, new LinearLayout.LayoutParams(-1, -2));
+        return choice;
+    }
     private void adbSettings() {
-        LinearLayout adb = section("adb", R.string.adb_mode, s(rootMode() ? R.string.root_adb : R.string.wireless_title));
-        Spinner mode = new Spinner(this);
+        LinearLayout adb = sheetBody(SHEET_ADB, R.drawable.ic_adb, R.color.tile_violet,
+            R.color.tile_violet_bg, R.string.adb_mode);
+        MaterialButtonToggleGroup mode = new MaterialButtonToggleGroup(this);
+        mode.setOrientation(LinearLayout.VERTICAL);
+        mode.setSingleSelection(true); mode.setSelectionRequired(true);
         mode.setContentDescription(s(R.string.adb_mode));
-        ArrayAdapter<String> choices = new ArrayAdapter<>(this, android.R.layout.simple_spinner_item,
-            new String[]{s(R.string.wireless_mode), s(R.string.root_adb)});
-        choices.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
-        mode.setAdapter(choices); mode.setSelection(rootMode() ? 1 : 0);
-        adb.addView(mode, new LinearLayout.LayoutParams(-1, dp(56)));
+        MaterialButton wirelessChoice = modeChoice(mode, R.string.wireless_mode);
+        MaterialButton rootChoice = modeChoice(mode, R.string.root_adb);
+        mode.check(rootMode() ? rootChoice.getId() : wirelessChoice.getId());
+        LinearLayout.LayoutParams modeParams = new LinearLayout.LayoutParams(-1, -2);
+        modeParams.bottomMargin = dp(12);
+        adb.addView(mode, modeParams);
         LinearLayout root = new LinearLayout(this); root.setOrientation(LinearLayout.VERTICAL); adb.addView(root);
         LinearLayout wireless = new LinearLayout(this); wireless.setOrientation(LinearLayout.VERTICAL); adb.addView(wireless);
         Runnable displayMode = () -> {
             root.setVisibility(rootMode() ? View.VISIBLE : View.GONE);
             wireless.setVisibility(rootMode() ? View.GONE : View.VISIBLE);
         };
-        mode.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
-            @Override public void onItemSelected(AdapterView<?> parent, View view, int position, long id) {
-                boolean selected = position == 1;
-                if (selected != rootMode()) {
-                    name.krot.adbsshtunnel.Settings.prefs(MainActivity.this).edit().putBoolean("root_mode", selected).commit();
-                    if (name.krot.adbsshtunnel.Settings.enabled(MainActivity.this)) SshdService.select(MainActivity.this, true);
-                }
-                displayMode.run(); refresh();
+        mode.addOnButtonCheckedListener((group, checkedId, checked) -> {
+            if (!checked) return;
+            boolean selected = checkedId == rootChoice.getId();
+            if (selected != rootMode()) {
+                name.krot.adbsshtunnel.Settings.prefs(MainActivity.this).edit().putBoolean("root_mode", selected).commit();
+                if (name.krot.adbsshtunnel.Settings.enabled(MainActivity.this)) SshdService.select(MainActivity.this, true);
             }
-            @Override public void onNothingSelected(AdapterView<?> parent) {}
+            displayMode.run(); refresh();
         });
         displayMode.run();
         persistentAdb = new SwitchMaterial(this);
@@ -356,15 +566,19 @@ public final class MainActivity extends AppCompatActivity {
         dialog.show();
     }
     private void advancedSettings() {
-        LinearLayout preferences = section("advanced", R.string.advanced_settings, s(R.string.advanced_summary));
+        LinearLayout preferences = sheetBody(SHEET_MORE, R.drawable.ic_settings, R.color.tile_orange,
+            R.color.tile_orange_bg, R.string.advanced_settings);
         action(preferences, R.string.language, this::language);
-        String selected = AppCompatDelegate.getApplicationLocales().toLanguageTags();
-        text(preferences, selected.isEmpty() ? s(R.string.system_language) : ("ru".equals(selected) ? "Русский" : "English"), 15);
+        text(preferences, languageName(), 15);
         action(preferences, R.string.quick_settings, this::addTile);
         action(preferences, R.string.host_key, () -> detail(R.string.host_key, hostKey()));
         action(preferences, R.string.status_details, () -> detail(R.string.status_details, UiText.status(this, SshdService.state)));
         action(preferences, R.string.about_title, () -> detail(R.string.about_title,
             getString(R.string.about_version, versionName()) + "\n\n" + s(R.string.about)));
+    }
+    private String languageName() {
+        String selected = AppCompatDelegate.getApplicationLocales().toLanguageTags();
+        return selected.isEmpty() ? s(R.string.system_language) : ("ru".equals(selected) ? "Русский" : "English");
     }
     private String versionName() {
         try { return getPackageManager().getPackageInfo(getPackageName(), 0).versionName; }
@@ -399,7 +613,7 @@ public final class MainActivity extends AppCompatActivity {
             try {
                 name.krot.adbsshtunnel.Settings.saveKeys(this, Objects.requireNonNull(keys.getText()).toString());
                 if (name.krot.adbsshtunnel.Settings.enabled(this)) SshdService.select(this, true);
-                dialog.dismiss(); showPage(); message(s(R.string.keys_saved));
+                dialog.dismiss(); refresh(); message(s(R.string.keys_saved));
             } catch (IOException e) { message(e.getMessage()); }
         }));
         dialog.show();
@@ -504,10 +718,27 @@ public final class MainActivity extends AppCompatActivity {
         networkMonitor.start();
     }
     private void refresh() {
-        if (adbSummary != null) adbSummary.setText(s(rootMode() ? R.string.root_adb : R.string.wireless_title));
+        boolean enabled = name.krot.adbsshtunnel.Settings.enabled(this);
+        UiText.Tone tone = UiText.tone(enabled, SshdService.state);
+        long keys = keyCount();
+        if (headline != null) {
+            int title, tip;
+            switch (tone) {
+                case READY: title = R.string.power_on_title; tip = R.string.hint_turn_off; break;
+                case WORKING: title = R.string.power_working_title; tip = R.string.hint_turn_off; break;
+                case ATTENTION: title = R.string.power_attention_title; tip = R.string.hint_attention; break;
+                default: title = R.string.power_off_title; tip = keys == 0 ? R.string.hint_need_key : R.string.hint_turn_on;
+            }
+            headline.setText(title); hint.setText(tip);
+            paintPower(tone);
+            ViewCompat.setStateDescription(power, s(enabled ? R.string.state_on : R.string.state_off));
+        }
+        if (accessTile != null) accessTile.setText(getString(R.string.key_count, keys));
+        if (adbTile != null) adbTile.setText(s(rootMode() ? R.string.root_adb : R.string.wireless_title));
+        if (moreTile != null) moreTile.setText(languageName());
+        if (networkNow != null) networkNow.setText(networkDescription(null));
         if (wirelessHoldStatus != null) wirelessHoldStatus.setText(WirelessDebuggingHold.status(this));
         if (status != null) status.setText(UiText.status(this, SshdService.state));
-        if (toggle != null) toggle.setChecked(name.krot.adbsshtunnel.Settings.enabled(this));
         if (wifiSummary != null) wifiSummary.setText(summary(NetworkSettings.Kind.WIFI));
         if (mobileSummary != null) mobileSummary.setText(summary(NetworkSettings.Kind.MOBILE));
         if (rootStatus != null && !rootRequest) {
@@ -528,6 +759,9 @@ public final class MainActivity extends AppCompatActivity {
     }
     @Override protected void onStop() {
         if (networkMonitor != null) networkMonitor.close();
-        networkMonitor = null; unregisterReceiver(receiver); super.onStop();
+        networkMonitor = null; unregisterReceiver(receiver);
+        if (pulse != null) { pulse.cancel(); pulse = null; }
+        shownTone = null;
+        super.onStop();
     }
 }

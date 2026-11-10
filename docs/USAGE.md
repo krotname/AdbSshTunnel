@@ -5,8 +5,10 @@ no shell, PTY, file transfer, agent/X11 or reverse forwarding.
 
 Package: `name.krot.adbsshtunnel`. Version: `2.0.1`. See the release profile and device acceptance before deployment.
 
-One main screen contains the tunnel switch, live status and connection information.
-Expand **Access: networks and keys**, **ADB mode**, or **More** when needed.
+The main screen fits without scrolling: one large round button turns the tunnel
+on or off and changes colour with its state (grey — off, amber — getting ready,
+green — working, red — needs attention; tap the status text for details). Four
+tiles open bottom sheets: **Connect**, **Networks & keys**, **ADB mode** and **More**.
 Both ADB modes, independent network policies, key management, diagnostics, language
 selection and the Quick Settings tile remain available. Upgrades preserve settings
 and keys. Missing `su` is explained explicitly; Wireless Debugging works without root.

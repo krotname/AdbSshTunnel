@@ -146,4 +146,18 @@
     <string name="listener_failed">Не удалось запустить SSH</string>
     <string name="ssh_exited">SSH остановлен. Включите туннель для повторного запуска</string>
     <string name="discovery_error">Поиск ADB недоступен: %1$s</string>
+    <string name="power_on_title">Туннель включён</string>
+    <string name="power_off_title">Туннель выключен</string>
+    <string name="power_working_title">Подготовка…</string>
+    <string name="power_attention_title">Нужно внимание</string>
+    <string name="hint_turn_on">Нажмите на большую кнопку, чтобы включить</string>
+    <string name="hint_turn_off">Нажмите на большую кнопку, чтобы выключить</string>
+    <string name="hint_attention">Нажмите на текст выше — там подсказка</string>
+    <string name="hint_need_key">Сначала добавьте SSH-ключ в «Сети и ключи»</string>
+    <string name="state_on">Включено</string>
+    <string name="state_off">Выключено</string>
+    <string name="tile_access">Сети и ключи</string>
+    <string name="tile_connect_summary">Команды для компьютера</string>
+    <string name="connect_step_title">Выполните на компьютере</string>
+    <string name="network_now">Сети сейчас</string>
 </resources>

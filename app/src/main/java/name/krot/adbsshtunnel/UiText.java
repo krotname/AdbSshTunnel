@@ -5,6 +5,16 @@ import android.content.Context;
 /** Presentation of backend states; never changes tunnel or network decisions. */
 public final class UiText {
     private UiText() { }
+    /** Simple traffic-light state for the main screen; derived only from existing backend states. */
+    public enum Tone { OFF, WORKING, READY, ATTENTION }
+    public static Tone tone(boolean enabled, String state) {
+        if (!enabled) return Tone.OFF;
+        if (state == null || state.equals("Starting") || state.equals("Stopped")
+            || state.equals("Checking root ADB protection") || state.startsWith("Checking local ADB "))
+            return Tone.WORKING;
+        if (state.startsWith("SSH :19191 → ADB :")) return Tone.READY;
+        return Tone.ATTENTION;
+    }
     public static int mode(NetworkPolicy.Mode mode) {
         switch (mode) {
             case ALLOWLIST: return R.string.mode_allow;

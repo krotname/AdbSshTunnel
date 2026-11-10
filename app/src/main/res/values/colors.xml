@@ -1,0 +1,20 @@
+<resources>
+    <color name="screen">#F6F7FB</color>
+    <color name="ink">#111827</color>
+    <color name="muted">#6B7280</color>
+    <color name="row">#ECEFF5</color>
+    <color name="code">#E9EDF5</color>
+    <color name="on_power">#FFFFFF</color>
+    <color name="tile_blue">#2563EB</color><color name="tile_blue_bg">#E0ECFF</color>
+    <color name="tile_green">#16A34A</color><color name="tile_green_bg">#DCFCE7</color>
+    <color name="tile_violet">#7C3AED</color><color name="tile_violet_bg">#EDE9FE</color>
+    <color name="tile_orange">#EA580C</color><color name="tile_orange_bg">#FFEDD5</color>
+    <color name="power_ready_start">#34D399</color><color name="power_ready_end">#059669</color>
+    <color name="power_working_start">#FBBF24</color><color name="power_working_end">#D97706</color>
+    <color name="power_attention_start">#FB7185</color><color name="power_attention_end">#E11D48</color>
+    <color name="power_off_start">#CBD5E1</color><color name="power_off_end">#94A3B8</color>
+    <color name="tone_ready">#047857</color>
+    <color name="tone_working">#B45309</color>
+    <color name="tone_attention">#BE123C</color>
+    <color name="tone_off">#374151</color>
+</resources>

@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 2.2.0
 
 - New main screen without scrolling: a large colour-coded on/off button with a plain-language status and four tiles (Connect, Networks & keys, ADB mode, More) that open bottom sheets. All previous functions and settings are unchanged.
 

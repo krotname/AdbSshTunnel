@@ -147,7 +147,12 @@ public final class MainActivity extends AppCompatActivity {
         content.setOrientation(LinearLayout.VERTICAL);
         int side = dp(compact ? 16 : 20);
         content.setPadding(side, dp(compact ? 8 : 16), side, dp(compact ? 12 : 20));
-        shell.addView(content, new FrameLayout.LayoutParams(-1, -1, Gravity.CENTER_HORIZONTAL));
+        // Fills the window exactly; scrolls only as a fallback when large fonts on a very short window
+        // cannot fit the minimum power button and tiles.
+        NestedScrollView fit = new NestedScrollView(this);
+        fit.setFillViewport(true);
+        fit.addView(content, new FrameLayout.LayoutParams(-1, -1, Gravity.CENTER_HORIZONTAL));
+        shell.addView(fit, new FrameLayout.LayoutParams(-1, -1));
         label(content, s(R.string.app_name), compact ? 20 : 24, true, R.color.ink, 1);
         label(content, s(R.string.tunnel_intro), 14, false, R.color.muted, 2);
         LinearLayout hero = new LinearLayout(this);
@@ -196,12 +201,15 @@ public final class MainActivity extends AppCompatActivity {
     /** One big round on/off button that fills the free space without scrolling. */
     private void powerButton(LinearLayout hero) {
         FrameLayout stage = new FrameLayout(this);
+        int minimum = dp(104);
+        stage.setMinimumHeight(minimum);
         hero.addView(stage, new LinearLayout.LayoutParams(-1, 0, 1));
         int cap = dp(compact ? 196 : 232);
         power = new FrameLayout(this) {
             @Override protected void onMeasure(int widthSpec, int heightSpec) {
-                int size = Math.min(Math.min(View.MeasureSpec.getSize(widthSpec),
-                    View.MeasureSpec.getSize(heightSpec)), cap);
+                int height = View.MeasureSpec.getMode(heightSpec) == View.MeasureSpec.UNSPECIFIED
+                    ? minimum : View.MeasureSpec.getSize(heightSpec);
+                int size = Math.max(minimum, Math.min(Math.min(View.MeasureSpec.getSize(widthSpec), height), cap));
                 int spec = View.MeasureSpec.makeMeasureSpec(size, View.MeasureSpec.EXACTLY);
                 super.onMeasure(spec, spec);
             }

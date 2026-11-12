@@ -1,50 +1,42 @@
-# Android tunnel
+# Туннель Android
 
 ## Purpose
-
-Provide trusted computers with restricted SSH access to this Android device's
-local ADB endpoint while preserving Android debugging authorization and the
-explicit distinction between wireless debugging and root-assisted operation.
+Предоставить доверенным компьютерам ограниченный SSH-доступ к локальному adbd устройства Android, сохраняя системную авторизацию отладки и различие беспроводного и root-режима.
 
 ## Requirements
 
-### Requirement: Stable restricted destination
-The Android server SHALL accept local TCP forwarding only to the virtual
-destination `127.0.0.1:5555` and resolve it to the currently verified local ADB
-endpoint. The default SSH listening port SHALL be `19191`.
+### Requirement: Ограниченное назначение
+Android SHALL принимать локальный TCP forwarding только к виртуальному адресу `127.0.0.1:5555` и перенаправлять его на проверенный локальный endpoint adbd. Порт SSH по умолчанию SHALL быть `19191`. Это протокол устройства adbd, а не Linux SDK ADB server на 5037.
 
-#### Scenario: Wireless debugging port changes
-- **WHEN** Android replaces a previously discovered wireless debugging port
-- **THEN** the old connection is revoked and the same SSH forwarding command can use the newly verified local endpoint
+#### Scenario: Изменился порт беспроводной отладки
+- **WHEN** Android заменяет обнаруженный порт беспроводной отладки
+- **THEN** прежний доступ отзывается, а та же команда SSH forwarding может использовать новый проверенный локальный endpoint
 
-#### Scenario: Client requests another destination or SSH service
-- **WHEN** a client requests another host or port, shell, exec, PTY, SFTP or reverse forwarding
-- **THEN** the SSH server rejects the request
+#### Scenario: Клиент запросил другое назначение или сервис
+- **WHEN** клиент запрашивает другой host/port, shell, exec, PTY, SFTP или reverse forwarding
+- **THEN** SSH-сервер отклоняет запрос
 
-### Requirement: Nonroot debugging remains system controlled
-Nonroot operation SHALL depend on Android's existing wireless debugging and
-pairing, without enabling a replacement adbd listener or obtaining root.
+### Requirement: Системное управление отладкой без root
+Режим без root SHALL зависеть от штатной беспроводной отладки Android и pairing, без запуска замещающего adbd или получения root.
 
-#### Scenario: Wireless debugging is disabled
-- **WHEN** the system wireless debugging endpoint becomes unavailable
-- **THEN** new ADB channels are denied and existing SSH/ADB access is revoked
+#### Scenario: Беспроводная отладка выключена
+- **WHEN** системный endpoint беспроводной отладки становится недоступен
+- **THEN** новые ADB-каналы запрещаются, существующий доступ SSH/ADB отзывается
 
-### Requirement: Root operation requires its controller
-Root ADB SHALL operate only through the supported native controller and granted
-root authorization, with rejection when its prerequisites are unavailable.
+### Requirement: Root требует отдельного контроллера
+Root ADB SHALL работать только через поддерживаемый native controller и предоставленное root-разрешение, с отказом при отсутствии предпосылок.
 
-#### Scenario: Root authorization or controller is missing
-- **WHEN** root mode is selected but authorization or the controller is unavailable
-- **THEN** root operation fails with a diagnostic instead of granting nonroot operation root privileges
+#### Scenario: Нет root-разрешения или контроллера
+- **WHEN** выбран root-режим, но разрешение или контроллер недоступны
+- **THEN** операция завершается диагностикой, без предоставления root режиму обычной беспроводной отладки
 
-### Requirement: Visible and explicit tunnel control
-The app SHALL expose tunnel state, connection details and actionable diagnostics
-in English and Russian, with an explicit stop control and a quick-settings tile.
+### Requirement: Явное управление туннелем
+Приложение SHALL показывать состояние, параметры подключения и понятную диагностику на русском и английском, предоставляя остановку и плитку быстрых настроек Android.
 
-#### Scenario: User stops the tunnel
-- **WHEN** the user disables the tunnel using the app or tile
-- **THEN** the SSH listener and active tunnel access close
+#### Scenario: Пользователь остановил туннель
+- **WHEN** пользователь выключает туннель в приложении или плиткой
+- **THEN** SSH listener и активный туннельный доступ закрываются
 
-#### Scenario: A prerequisite prevents access
-- **WHEN** a required key, network identity or debugging endpoint is unavailable
-- **THEN** the interface reports the blocking condition and a recovery action
+#### Scenario: Не выполнено условие доступа
+- **WHEN** отсутствует ключ, идентификатор сети или endpoint отладки
+- **THEN** интерфейс показывает причину блокировки и способ восстановления

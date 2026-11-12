@@ -41,7 +41,7 @@ public final class WirelessDebuggingHold implements AutoCloseable {
             && name.krot.adbsshtunnel.Settings.prefs(context).getBoolean("wireless_hold", false);
     }
     public static int status(Context context) {
-        if (Build.VERSION.SDK_INT < 30) return R.string.android10_root_required;
+        if (Build.VERSION.SDK_INT < 30) return R.string.android10_legacy_setup;
         if (!BuildConfig.WIRELESS_HOLD_SUPPORTED) return R.string.wireless_manual;
         if (!selected(context)) return R.string.wireless_hold_off;
         if (!permitted(context)) return R.string.wireless_hold_permission;

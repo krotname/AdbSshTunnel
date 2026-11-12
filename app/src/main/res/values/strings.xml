@@ -1,5 +1,6 @@
 <resources>
-    <string name="android10_root_required">Android 10 requires root mode. Wireless Debugging without root is available on Android 11 or later. This app does not enable unprotected ADB over Wi-Fi.</string>
+    <string name="legacy_adb_mode">ADB after USB activation (Android 10)</string>
+    <string name="android10_legacy_setup">On Android 10 without root: enable USB debugging, connect to a trusted computer, accept its RSA prompt and run adb -d tcpip 5555. Then enable this tunnel. Repeat USB activation after each phone reboot. This also opens the Android ADB port 5555 on the network: use only a trusted network. The app cannot firewall that port without root. Run adb usb from the connected computer to close network ADB when finished. Android RSA authorization and SSH keys remain required.</string>
     <string name="persistent_usb">Keep USB debugging for trusted computers</string>
     <string name="persistent_usb_help">Root keeps USB debugging enabled and prevents approved ADB keys from expiring. New computers still require Android RSA confirmation. After reboot, recovery needs root and may need the first unlock. Turning this off restores the previous key timeout and leaves USB debugging as it is.</string>
     <string name="root_su_missing">su was not found. Root is unavailable: it may be disabled, hidden from this app or not installed. To use SSH without root, choose Wireless Debugging in ADB mode.</string>

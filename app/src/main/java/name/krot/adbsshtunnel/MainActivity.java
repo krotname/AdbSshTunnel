@@ -723,8 +723,7 @@ public final class MainActivity extends AppCompatActivity {
         mode.setOrientation(LinearLayout.VERTICAL);
         mode.setSingleSelection(true); mode.setSelectionRequired(true);
         mode.setContentDescription(s(R.string.adb_mode));
-        MaterialButton wirelessChoice = modeChoice(mode, R.string.wireless_mode);
-        wirelessChoice.setEnabled(Build.VERSION.SDK_INT >= 30);
+        MaterialButton wirelessChoice = modeChoice(mode, Build.VERSION.SDK_INT < 30 ? R.string.legacy_adb_mode : R.string.wireless_mode);
         MaterialButton rootChoice = modeChoice(mode, R.string.root_adb);
         mode.check(rootMode() ? rootChoice.getId() : wirelessChoice.getId());
         LinearLayout.LayoutParams modeParams = new LinearLayout.LayoutParams(-1, -2);
@@ -732,7 +731,6 @@ public final class MainActivity extends AppCompatActivity {
         adb.addView(mode, modeParams);
         LinearLayout root = new LinearLayout(this); root.setOrientation(LinearLayout.VERTICAL); adb.addView(root);
         LinearLayout wireless = new LinearLayout(this); wireless.setOrientation(LinearLayout.VERTICAL); adb.addView(wireless);
-        if (Build.VERSION.SDK_INT < 30) text(adb, s(R.string.android10_root_required), 14);
         Runnable displayMode = () -> {
             root.setVisibility(rootMode() ? View.VISIBLE : View.GONE);
             wireless.setVisibility(rootMode() ? View.GONE : View.VISIBLE);
@@ -792,7 +790,7 @@ public final class MainActivity extends AppCompatActivity {
         wirelessHoldStatus = text(wireless, s(WirelessDebuggingHold.status(this)), 14);
         action(wireless, R.string.developer_options, this::developerOptions);
         action(wireless, R.string.adb_help, () -> info(R.drawable.ic_adb, Look.VIOLET, s(R.string.wireless_title),
-            Build.VERSION.SDK_INT < 30 ? s(R.string.android10_root_required) : BuildConfig.WIRELESS_HOLD_SUPPORTED
+            Build.VERSION.SDK_INT < 30 ? s(R.string.android10_legacy_setup) : BuildConfig.WIRELESS_HOLD_SUPPORTED
                 ? s(R.string.wireless_help) + "\n\n" + s(R.string.wireless_hold_setup)
                 : s(R.string.wireless_manual_help)));
     }
@@ -1114,7 +1112,7 @@ public final class MainActivity extends AppCompatActivity {
             ViewCompat.setStateDescription(power, s(enabled ? R.string.state_on : R.string.state_off));
         }
         if (accessTile != null) accessTile.setText(getString(R.string.key_count, keys));
-        if (adbTile != null) adbTile.setText(s(rootMode() ? R.string.root_adb : R.string.wireless_title));
+        if (adbTile != null) adbTile.setText(s(rootMode() ? R.string.root_adb : Build.VERSION.SDK_INT < 30 ? R.string.legacy_adb_mode : R.string.wireless_title));
         if (moreTile != null) moreTile.setText(languageName());
         if (networkNow != null) networkNow.setText(networkDescription(null));
         if (wirelessHoldStatus != null) wirelessHoldStatus.setText(WirelessDebuggingHold.status(this));

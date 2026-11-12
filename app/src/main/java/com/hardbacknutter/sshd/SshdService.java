@@ -37,8 +37,6 @@ public final class SshdService extends Service {
     public static boolean select(Context c, boolean selected) {
         if (selected) {
             try {
-                if (Build.VERSION.SDK_INT < 30 && !Settings.prefs(c).getBoolean("root_mode", false))
-                    throw new IOException(c.getString(name.krot.adbsshtunnel.R.string.android10_root_required));
                 KeyPolicy.parse(Settings.keys(c));
             }
             catch (IOException e) {
@@ -110,12 +108,13 @@ public final class SshdService extends Service {
         startupFailed = false;
         try { KeyPolicy.parse(Settings.keys(this)); } catch (IOException e) { Settings.setEnabled(this, false); startupFailed = true; publish(e.getMessage()); stopSelf(); return START_NOT_STICKY; }
         boolean rootMode = Settings.prefs(this).getBoolean("root_mode", false);
-        if (Build.VERSION.SDK_INT < 30 && !rootMode) {
-            Settings.setEnabled(this, false);
-            publish(getString(name.krot.adbsshtunnel.R.string.android10_root_required));
-            stopSelf(); return START_NOT_STICKY;
-        }
         if (rootMode) checkRootGuard();
+        else if (Build.VERSION.SDK_INT < 30) {
+            // Android 10 has no TLS discovery. The user explicitly enables adbd
+            // over USB; only an RSA-authenticated loopback ADB endpoint is accepted.
+            desiredPort = 5555;
+            reconcile();
+        }
         else {
             wirelessHold = new WirelessDebuggingHold(this, enabled -> {
                 int token = ++discoveryGeneration;
@@ -179,9 +178,10 @@ public final class SshdService extends Service {
         if (desiredPort == 0) { publish("Waiting for local ADB: configure the selected mode"); return; }
         if (activePort == desiredPort && (running || pendingPort == desiredPort)) return;
         if (pendingPort == desiredPort) return;
-        startForPort(desiredPort, !Settings.prefs(this).getBoolean("root_mode", false), addresses);
+        startForPort(desiredPort, Build.VERSION.SDK_INT >= 30 && !Settings.prefs(this).getBoolean("root_mode", false), addresses);
     }
     private void startForPort(int port, boolean wireless, SortedSet<String> addresses) {
+        boolean rootMode = Settings.prefs(this).getBoolean("root_mode", false);
         stopNative();
         int token = ++generation;
         pendingPort = port;
@@ -190,12 +190,13 @@ public final class SshdService extends Service {
             String failure = null;
             try {
                 if (wireless) AdbTlsProbe.verify(port);
+                else if (!rootMode) AdbTlsProbe.verifyAuthenticatedPlain(port);
                 else AdbTlsProbe.verifyPlain(port);
             }
             catch (IOException e) { failure = "Local ADB unavailable; configure debugging first"; }
             final String error = failure;
             main.post(() -> {
-                if (token != generation || !Settings.enabled(this) || wireless == Settings.prefs(this).getBoolean("root_mode", false)) return;
+                if (token != generation || !Settings.enabled(this) || rootMode != Settings.prefs(this).getBoolean("root_mode", false)) return;
                 if (error != null) { pendingPort = 0; publish(error); return; }
                 try {
                     Settings.writePolicy(this, 5555);

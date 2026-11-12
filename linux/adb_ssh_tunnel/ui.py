@@ -96,6 +96,7 @@ CSS = """
 .tile {{ border-radius: 22px; padding: 14px; box-shadow: none; border: 1px solid {tile_border};
   transition: transform 160ms ease-out, background-color 200ms; }}
 .tile:active {{ transform: scale(0.97); }}
+.compact .tile {{ padding: 10px 12px; }}
 .tile-title {{ font-weight: 800; color: {ink}; }}
 .tile-summary {{ color: {muted}; font-size: 13px; font-weight: 400; }}
 .bubble {{ border-radius: 999px; min-width: 40px; min-height: 40px; }}
@@ -159,6 +160,7 @@ class PowerGlow(Gtk.Widget):
     """
 
     SIZE = 216
+    COMPACT = 168
     FADE = 0.45
 
     def __init__(self, page_bg: str):
@@ -393,6 +395,13 @@ class Application(Adw.Application):
         self.window = Adw.ApplicationWindow(application=self, title='ADB SSH Tunnel')
         self.window.add_css_class('tunnel-window')
         self.window.set_default_size(420, 800)
+        # Breakpoints need an explicit minimum size; 360×294 is the GNOME mobile minimum.
+        self.window.set_size_request(360, 294)
+        self.compact = False
+        short = Adw.Breakpoint.new(Adw.BreakpointCondition.parse('max-height: 720px'))
+        short.connect('apply', lambda *_: self.set_compact(True))
+        short.connect('unapply', lambda *_: self.set_compact(False))
+        self.window.add_breakpoint(short)
         self.apply_style()
         self.style_handler = Adw.StyleManager.get_default().connect('notify::dark', self.apply_style)
         self.open_settings()
@@ -425,10 +434,13 @@ class Application(Adw.Application):
         scroll = Gtk.ScrolledWindow(hscrollbar_policy=Gtk.PolicyType.NEVER, child=clamp, vexpand=True)
         view = Adw.ToolbarView(content=scroll)
         view.add_css_class('tunnel-bg')
-        view.add_top_bar(Adw.HeaderBar(show_title=tag is None))
+        header = Adw.HeaderBar(show_title=tag is None)
+        view.add_top_bar(header)
         page = Adw.NavigationPage(title=title, child=view)
         if tag:
             page.set_tag(tag)
+        if tag == 'main':
+            self.main_header, self.main_scroll = header, scroll
         return page, column
 
     def hero(self, column, icon, accent, title, subtitle):
@@ -459,6 +471,7 @@ class Application(Adw.Application):
         self.window.set_content(self.toast)
 
         page, column = self.page('ADB SSH Tunnel', 'main')
+        self.main_column = column
         column.set_spacing(10)
         column.set_margin_top(0)
         title = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)
@@ -466,6 +479,7 @@ class Application(Adw.Application):
         title.append(self.label(self.t('ADB from your computer, safely over SSH',
                                        'ADB с компьютера — безопасно, через SSH'), 'app-subtitle', center=True))
         column.append(title)
+        self.title_box = title
 
         self.glow = PowerGlow(PAGE_BG[self.dark()])
         overlay = Gtk.Overlay(child=self.glow)
@@ -473,6 +487,7 @@ class Application(Adw.Application):
                          halign=Gtk.Align.CENTER, valign=Gtk.Align.CENTER)
         icon.add_css_class('power-icon')
         overlay.add_overlay(icon)
+        self.power_icon = icon
         self.toggle = Gtk.Button(child=overlay, halign=Gtk.Align.CENTER)
         self.toggle.add_css_class('power-button')
         self.toggle.connect('clicked', self.toggle_tunnel)
@@ -522,6 +537,20 @@ class Application(Adw.Application):
             self.tiles[key] = summary
         column.append(grid)
         self.nav.add(page)
+        self.set_compact(getattr(self, 'compact', False))
+
+    def set_compact(self, compact: bool):
+        """Short windows, such as Linux phones under Phosh, keep the whole main screen without scrolling."""
+        self.compact = compact
+        if not getattr(self, 'title_box', None):
+            return
+        (self.window.add_css_class if compact else self.window.remove_css_class)('compact')
+        size = PowerGlow.COMPACT if compact else PowerGlow.SIZE
+        self.glow.set_size_request(size, size)
+        self.power_icon.set_pixel_size(50 if compact else 64)
+        self.title_box.set_visible(not compact)
+        self.main_header.set_show_title(compact)
+        self.main_column.set_margin_bottom(12 if compact else 28)
 
     # Deeper pages -----------------------------------------------------------
 

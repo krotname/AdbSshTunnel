@@ -50,5 +50,15 @@ with tempfile.TemporaryDirectory() as tmp, patch.dict(os.environ, {'XDG_CONFIG_H
                 app.nav.pop_to_tag('main')
             settle()
             print(f'GTK {language} {width}px: layout, controls and deeper pages OK')
+        # Linux phones: the whole main screen fits a short window without scrolling.
+        app.window.set_default_size(360, 680)
+        settle()
+        scroll = app.main_scroll.get_vadjustment()
+        assert app.compact, 'A short window must switch to the compact main screen'
+        assert scroll.get_upper() <= scroll.get_page_size() + 1, (language, scroll.get_upper(), scroll.get_page_size())
+        app.window.set_default_size(420, 800)
+        settle()
+        assert not app.compact, 'A tall window must leave the compact main screen'
+        print(f'GTK {language} 360x680: compact main screen fits without scrolling')
     app.window.destroy()
     app.quit()

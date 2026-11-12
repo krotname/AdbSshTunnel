@@ -67,6 +67,11 @@ public final class MainActivity extends AppCompatActivity {
     /** Between onStart and onStop; late background callbacks must not restart the glow. */
     private boolean visible;
     private UiText.Problem shownProblem;
+    /** A starting tunnel passes through short waits; a problem shows only after it lasts this long. */
+    private static final long ATTENTION_GRACE_MS = 1500;
+    private long attentionSince;
+    private final Handler ui = new Handler(Looper.getMainLooper());
+    private final Runnable attentionRecheck = this::refresh;
     private TextView headline, status, hint;
     private MaterialButton problemChip;
     private TextView accessTile, adbTile, moreTile;
@@ -1087,7 +1092,10 @@ public final class MainActivity extends AppCompatActivity {
         boolean enabled = name.krot.adbsshtunnel.Settings.enabled(this);
         String state = SshdService.state;
         UiText.Problem problem = currentProblem(enabled, state);
-        UiText.Tone tone = problem != UiText.Problem.NONE ? UiText.Tone.ATTENTION : UiText.tone(enabled, state);
+        boolean settling = settling(enabled, problem);
+        if (settling) problem = UiText.Problem.NONE;
+        UiText.Tone tone = problem != UiText.Problem.NONE ? UiText.Tone.ATTENTION
+            : settling ? UiText.Tone.WORKING : UiText.tone(enabled, state);
         long keys = keyCount();
         if (headline != null) {
             int title, tip;
@@ -1117,6 +1125,23 @@ public final class MainActivity extends AppCompatActivity {
                 ? R.string.root_configured : R.string.root_unconfigured));
         }
     }
+    /** True while an enabled tunnel's problem is too fresh to show; refresh runs again when the grace ends. */
+    private boolean settling(boolean enabled, UiText.Problem problem) {
+        if (!enabled || problem == UiText.Problem.NONE) {
+            attentionSince = 0;
+            ui.removeCallbacks(attentionRecheck);
+            return false;
+        }
+        // Already on screen (e.g. after the problem changed): keep showing it without a new pause.
+        if (shownProblem != null && shownProblem != UiText.Problem.NONE) return false;
+        long now = SystemClock.uptimeMillis();
+        if (attentionSince == 0) attentionSince = now;
+        long left = attentionSince + ATTENTION_GRACE_MS - now;
+        if (left <= 0) return false;
+        ui.removeCallbacks(attentionRecheck);
+        if (visible) ui.postDelayed(attentionRecheck, left);
+        return true;
+    }
     @Override protected void onStart() {
         super.onStart();
         visible = true;
@@ -1132,6 +1157,8 @@ public final class MainActivity extends AppCompatActivity {
         if (networkMonitor != null) networkMonitor.close();
         networkMonitor = null; unregisterReceiver(receiver);
         visible = false;
+        ui.removeCallbacks(attentionRecheck);
+        attentionSince = 0;
         if (tint != null) { tint.cancel(); tint = null; }
         if (glow != null) glow.stop();
         if (power != null) { power.animate().cancel(); power.setScaleX(1f); power.setScaleY(1f); }

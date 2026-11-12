@@ -2,9 +2,9 @@
 
 ## Linux
 
-- Версия Linux: `linux/adb_ssh_tunnel/__init__.py`, **2.3.0**; Android 2.4.0.
+- Версия Linux: `linux/adb_ssh_tunnel/__init__.py`, **2.5.0**; Android 2.4.0.
 - App ID `name.krot.adbsshtunnel.linux`, Debian package `adb-ssh-tunnel`.
-- Артефакты: `adb-ssh-tunnel_2.3.0_arm64.deb` и `adb-ssh-tunnel_2.3.0_amd64.deb`,
+- Артефакты: `adb-ssh-tunnel_2.5.0_arm64.deb` и `adb-ssh-tunnel_2.5.0_amd64.deb`,
   `SHA256SUMS` и manifest с точным source SHA, версиями зависимостей и проверками.
 - Платформа: Debian/Kali/совместимые дистрибутивы, Python >=3.11,
   GTK >=4.12, Libadwaita >=1.4, NetworkManager, user systemd, локальный SDK ADB.
@@ -20,7 +20,7 @@
   GUI RU/EN на Phosh 360 логических пикселей и обычном desktop.
 - ARM64 устанавливается и проверяется на Linux-телефоне по прямому поручению.
   Пустой `adb devices` подтверждает серверный путь, не команды на Android.
-- Канал — GitHub Release `linux-v2.3.0`, отдельный от Android и `latest` APK.
+- Канал — GitHub Release `linux-v2.5.0`, отдельный от Android и `latest` APK.
   Не делать Linux-only release latest для Android-ссылок.
 - Перед выпуском — Reversa 1.3.6, внешний review с проверкой SSH/auth, CI точного head,
   самостоятельный diff, merge и main CI. Затем публичный readback/download,

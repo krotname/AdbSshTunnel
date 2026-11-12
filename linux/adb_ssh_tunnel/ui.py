@@ -155,13 +155,17 @@ class PowerGlow(Gtk.Widget):
     """The big round button face: halo, ring, gap and a gradient disc.
 
     Colours glide between states. The ring spins while the tunnel gets ready,
-    breathes while it is on and rests when it is off. Animation runs only when
-    something moves and respects the desktop's reduce-motion setting.
+    breathes while it is on and rests when it is off. Fades and the spin use
+    every display frame; once they settle, the slow breathing redraws only
+    BREATH_FPS times a second, and nothing is redrawn while the button is
+    hidden or the state is still. Motion respects the reduce-motion setting.
     """
 
     SIZE = 216
     COMPACT = 168
     FADE = 0.45
+    BREATH_FPS = 20
+    GLOW = {'off': 0.0, 'working': 1.0, 'ready': 1.0, 'attention': 0.8}
 
     def __init__(self, page_bg: str):
         super().__init__()
@@ -176,6 +180,7 @@ class PowerGlow(Gtk.Widget):
         self.glow = 0.0
         self.spin = 0.0
         self.tick_id = 0
+        self.breath_id = 0
         self.last = 0.0
         self.set_can_target(False)
 
@@ -199,6 +204,7 @@ class PowerGlow(Gtk.Widget):
         self.queue_draw()
 
     def ensure_ticking(self):
+        self.stop_breathing()
         if self.tick_id or not self.motion():
             return
         self.last = time.monotonic()
@@ -212,18 +218,47 @@ class PowerGlow(Gtk.Widget):
         target = tuple(channels(v) for v in POWER[self.tone])
         self.start = mix(self.from_colors[0], target[0], eased)
         self.end = mix(self.from_colors[1], target[1], eased)
-        want = {'off': 0.0, 'working': 1.0, 'ready': 1.0, 'attention': 0.8}[self.tone]
+        want = self.GLOW[self.tone]
         self.glow += (want - self.glow) * min(1.0, dt * 6)
         if self.tone == 'working':
             self.spin = (self.spin + dt * 300) % 360
         self.queue_draw()
-        if self.tone == 'off' and progress >= 1.0 and self.glow < 0.01:
-            self.glow = 0.0
+        if self.tone != 'working' and progress >= 1.0 and abs(want - self.glow) < 0.005:
+            # Settled: stop per-frame work; only the ready state keeps breathing.
+            self.glow = want
             self.tick_id = 0
+            self.start_breathing()
             return GLib.SOURCE_REMOVE
         return GLib.SOURCE_CONTINUE
 
+    def start_breathing(self):
+        if self.breath_id or self.tick_id or self.tone != 'ready' or not self.get_mapped() or not self.motion():
+            return
+        self.breath_id = GLib.timeout_add(1000 // self.BREATH_FPS, self.on_breath)
+
+    def on_breath(self):
+        if self.tone != 'ready' or not self.get_mapped() or not self.motion():
+            self.breath_id = 0
+            self.queue_draw()
+            return GLib.SOURCE_REMOVE
+        self.queue_draw()
+        return GLib.SOURCE_CONTINUE
+
+    def stop_breathing(self):
+        if self.breath_id:
+            GLib.source_remove(self.breath_id)
+            self.breath_id = 0
+
+    def do_map(self):
+        Gtk.Widget.do_map(self)
+        self.start_breathing()
+
+    def do_unmap(self):
+        self.stop_breathing()
+        Gtk.Widget.do_unmap(self)
+
     def do_unrealize(self):
+        self.stop_breathing()
         if self.tick_id:
             self.remove_tick_callback(self.tick_id)
             self.tick_id = 0

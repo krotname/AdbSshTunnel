@@ -8,7 +8,7 @@ from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from adb_ssh_tunnel.core import Network, config_dir, default_config, save_config
-from adb_ssh_tunnel.ui import Application, Adw, GLib
+from adb_ssh_tunnel.ui import Application, Adw, GLib, Gtk, PowerGlow
 
 
 def settle():
@@ -17,6 +17,52 @@ def settle():
         while GLib.MainContext.default().pending():
             GLib.MainContext.default().iteration(False)
         time.sleep(0.01)
+
+
+def wait_for(condition, seconds=3.0):
+    until = time.monotonic() + seconds
+    while time.monotonic() < until and not condition():
+        while GLib.MainContext.default().pending():
+            GLib.MainContext.default().iteration(False)
+        time.sleep(0.01)
+    return condition()
+
+
+def check_glow_pacing():
+    """Per-frame redraws only while the glow moves; steady breathing is throttled."""
+    settings = Gtk.Settings.get_default()
+    settings.set_property('gtk-enable-animations', True)
+    window = Gtk.Window(default_width=300, default_height=300)
+    glow = PowerGlow('#ffffff')
+    window.set_child(glow)
+    window.present()
+    settle()
+    glow.set_tone('working')
+    settle()
+    assert glow.tick_id and not glow.breath_id, 'The connecting spin uses every frame'
+    glow.set_tone('ready')
+    assert wait_for(lambda: not glow.tick_id and glow.breath_id), 'Settled ready state must switch to slow breathing'
+    draws = []
+    glow.queue_draw = lambda: draws.append(time.monotonic())
+    wait_for(lambda: False, 1.0)
+    del glow.queue_draw
+    assert 5 <= len(draws) <= PowerGlow.BREATH_FPS + 3, f'Breathing redraws per second: {len(draws)}'
+    window.set_visible(False)
+    settle()
+    assert not glow.breath_id and not glow.tick_id, 'A hidden button must not redraw'
+    window.set_visible(True)
+    assert wait_for(lambda: glow.breath_id), 'Breathing resumes when the button is shown again'
+    for tone in ('attention', 'off'):
+        glow.set_tone(tone)
+        assert wait_for(lambda: not glow.tick_id and not glow.breath_id), f'A still {tone} state must stop redrawing'
+    assert glow.glow == 0.0
+    settings.set_property('gtk-enable-animations', False)
+    glow.set_tone('ready')
+    settle()
+    assert not glow.tick_id and not glow.breath_id, 'Reduced motion keeps the button still'
+    settings.set_property('gtk-enable-animations', True)
+    window.destroy()
+    print(f'GTK glow pacing: spin per frame, breathing {len(draws)}/s, idle when hidden or still')
 
 
 with tempfile.TemporaryDirectory() as tmp, patch.dict(os.environ, {'XDG_CONFIG_HOME': tmp}), \
@@ -73,5 +119,6 @@ with tempfile.TemporaryDirectory() as tmp, patch.dict(os.environ, {'XDG_CONFIG_H
     assert '1024' in app.port_error.get_text(), app.port_error.get_text()
     app.nav.pop_to_tag('main')
     print('GTK port errors: write failure and invalid number are told apart')
+    check_glow_pacing()
     app.window.destroy()
     app.quit()

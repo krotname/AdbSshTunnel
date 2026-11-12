@@ -1,25 +1,27 @@
 # ADB SSH Tunnel for Linux
 
-Version **2.2.0**. A native, adaptive GTK 4 / Libadwaita application for Linux
-phones and desktops. ARM64 and amd64 Debian packages are published separately
+Version **2.3.0**. A native, adaptive GTK 4 / Libadwaita application for Linux
+phones and desktops, with the same look as the Android app: a large round
+power button with an animated glow, four colour tiles and plain-language
+problem screens that say what happened and what to do. ARM64 and amd64 Debian packages are published separately
 from the Android APKs. Kali/Phosh ARM64 is the mobile test platform.
 
 ## Install and connect
 
 Download the package for your architecture from the
-[Linux release](https://github.com/krotname/AdbSshTunnel/releases/tag/linux-v2.2.0).
+[Linux release](https://github.com/krotname/AdbSshTunnel/releases/tag/linux-v2.3.0).
 On Kali or a Debian-based system providing GTK >= 4.12, Libadwaita >= 1.4,
 Python >= 3.11 and `python3-asyncssh` >= 2.24 in its configured repositories:
 
 ```sh
-sudo apt install ./adb-ssh-tunnel_2.2.0_arm64.deb
+sudo apt install ./adb-ssh-tunnel_2.3.0_arm64.deb
 adb start-server
 adb-ssh-tunnel
 ```
 
-The desktop launcher is **ADB SSH Tunnel**. In the app, allow the current
-network, import your computer's **OpenSSH public key** (`.pub`), then start the
-tunnel. Never copy the private key to the Linux phone. Passwords, authorized-key
+The desktop launcher is **ADB SSH Tunnel**. In **Networks & keys**, allow the
+current network and import your computer's **OpenSSH public key** (`.pub`), then
+tap the large round button to start the tunnel. Never copy the private key to the Linux phone. Passwords, authorized-key
 options and private-key imports are rejected. RSA keys need at least 3072 bits.
 
 Verify the server's SHA256 host fingerprint in the app through a trusted
@@ -73,7 +75,7 @@ Changing keys or rules does not change the host key.
 ## Background operation and diagnostics
 
 The app controls `adb-ssh-tunnel.service` in your **user** systemd session.
-Closing the window keeps an enabled tunnel running; use **Stop tunnel** to stop.
+Closing the window keeps an enabled tunnel running; tap the round button to stop.
 **Start at sign-in** is optional and disabled by default. It does not enable
 lingering or change system services. After a package upgrade, stop and start
 the tunnel to use the new backend. No root is needed after installation.
@@ -89,7 +91,7 @@ If no user systemd session is available, the UI cannot control the daemon.
 For headless use configure the same JSON file and run `adb-ssh-tunnel serve`.
 Only one daemon per user is permitted. There is no boot/root mode, Android
 Wireless Debugging switch, Quick Settings tile, or Android USB-key retention.
-English and Russian are available in Settings.
+English and Russian are available in **More**.
 
 ## Development
 

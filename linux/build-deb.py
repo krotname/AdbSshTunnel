@@ -21,6 +21,13 @@ def build(architecture: str, output: Path):
         lib.mkdir(parents=True)
         for file in (source / 'adb_ssh_tunnel').glob('*.py'):
             shutil.copyfile(file, lib / file.name)
+        # Own symbolic icons in a hicolor layout, so GTK recolours them; newer Adwaita
+        # themes dropped several legacy names.
+        icons = source / 'adb_ssh_tunnel' / 'icons'
+        for file in icons.rglob('*-symbolic.svg'):
+            target = lib / 'icons' / file.relative_to(icons)
+            target.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copyfile(file, target)
         mapping = {
             'adb-ssh-tunnel': 'usr/bin/adb-ssh-tunnel',
             'adb-ssh-tunnel.service': 'usr/lib/systemd/user/adb-ssh-tunnel.service',
@@ -42,7 +49,8 @@ def build(architecture: str, output: Path):
             f'Package: adb-ssh-tunnel\nVersion: {__version__}\nArchitecture: {architecture}\n'
             'Maintainer: krotname <kreout@gmail.com>\nSection: devel\nPriority: optional\n'
             'Depends: python3 (>= 3.11), python3-asyncssh (>= 2.24), python3-gi, '
-            'gir1.2-gtk-4.0 (>= 4.12), gir1.2-adw-1 (>= 1.4), network-manager, iproute2, adb\n'
+            'gir1.2-gtk-4.0 (>= 4.12), gir1.2-adw-1 (>= 1.4), librsvg2-common, '
+            'network-manager, iproute2, adb\n'
             'Homepage: https://github.com/krotname/AdbSshTunnel\n'
             'Description: Key-only SSH gateway to the local Linux ADB server\n'
             ' Adaptive GTK interface and per-network policies. No SSH shell or file transfer.\n',

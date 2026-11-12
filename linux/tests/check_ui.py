@@ -43,6 +43,12 @@ with tempfile.TemporaryDirectory() as tmp, patch.dict(os.environ, {'XDG_CONFIG_H
             assert app.window.get_width() <= width, (language, width, app.window.get_width())
             assert app.status.get_text(), 'The status must be visible'
             assert app.toggle.get_sensitive(), 'The start/stop control must be available'
-            print(f'GTK {language} {width}px: layout and controls OK')
+            for opener in (app.open_connect, app.open_networks, app.open_add_key, app.open_port, app.open_more):
+                opener()
+                settle()
+                assert app.window.get_width() <= width, (opener.__name__, language, width, app.window.get_width())
+                app.nav.pop_to_tag('main')
+            settle()
+            print(f'GTK {language} {width}px: layout, controls and deeper pages OK')
     app.window.destroy()
     app.quit()

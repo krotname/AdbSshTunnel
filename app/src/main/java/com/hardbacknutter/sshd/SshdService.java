@@ -36,7 +36,11 @@ public final class SshdService extends Service {
     public static native String getDropbearVersion();
     public static boolean select(Context c, boolean selected) {
         if (selected) {
-            try { KeyPolicy.parse(Settings.keys(c)); }
+            try {
+                if (Build.VERSION.SDK_INT < 30 && !Settings.prefs(c).getBoolean("root_mode", false))
+                    throw new IOException(c.getString(name.krot.adbsshtunnel.R.string.android10_root_required));
+                KeyPolicy.parse(Settings.keys(c));
+            }
             catch (IOException e) {
                 Settings.setEnabled(c, false);
                 c.stopService(new Intent(c, SshdService.class));
@@ -106,6 +110,11 @@ public final class SshdService extends Service {
         startupFailed = false;
         try { KeyPolicy.parse(Settings.keys(this)); } catch (IOException e) { Settings.setEnabled(this, false); startupFailed = true; publish(e.getMessage()); stopSelf(); return START_NOT_STICKY; }
         boolean rootMode = Settings.prefs(this).getBoolean("root_mode", false);
+        if (Build.VERSION.SDK_INT < 30 && !rootMode) {
+            Settings.setEnabled(this, false);
+            publish(getString(name.krot.adbsshtunnel.R.string.android10_root_required));
+            stopSelf(); return START_NOT_STICKY;
+        }
         if (rootMode) checkRootGuard();
         else {
             wirelessHold = new WirelessDebuggingHold(this, enabled -> {

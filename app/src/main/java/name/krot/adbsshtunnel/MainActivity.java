@@ -724,6 +724,7 @@ public final class MainActivity extends AppCompatActivity {
         mode.setSingleSelection(true); mode.setSelectionRequired(true);
         mode.setContentDescription(s(R.string.adb_mode));
         MaterialButton wirelessChoice = modeChoice(mode, R.string.wireless_mode);
+        wirelessChoice.setEnabled(Build.VERSION.SDK_INT >= 30);
         MaterialButton rootChoice = modeChoice(mode, R.string.root_adb);
         mode.check(rootMode() ? rootChoice.getId() : wirelessChoice.getId());
         LinearLayout.LayoutParams modeParams = new LinearLayout.LayoutParams(-1, -2);
@@ -731,6 +732,7 @@ public final class MainActivity extends AppCompatActivity {
         adb.addView(mode, modeParams);
         LinearLayout root = new LinearLayout(this); root.setOrientation(LinearLayout.VERTICAL); adb.addView(root);
         LinearLayout wireless = new LinearLayout(this); wireless.setOrientation(LinearLayout.VERTICAL); adb.addView(wireless);
+        if (Build.VERSION.SDK_INT < 30) text(adb, s(R.string.android10_root_required), 14);
         Runnable displayMode = () -> {
             root.setVisibility(rootMode() ? View.VISIBLE : View.GONE);
             wireless.setVisibility(rootMode() ? View.GONE : View.VISIBLE);
@@ -768,7 +770,7 @@ public final class MainActivity extends AppCompatActivity {
         action(root, R.string.root_status, this::showRootStatus);
         action(root, R.string.adb_help, () -> info(R.drawable.ic_shield, Look.VIOLET, s(R.string.root_adb), s(R.string.root_help)));
         text(wireless, s(R.string.wireless_short), 15);
-        if (BuildConfig.WIRELESS_HOLD_SUPPORTED) {
+        if (Build.VERSION.SDK_INT >= 30 && BuildConfig.WIRELESS_HOLD_SUPPORTED) {
             SwitchMaterial hold = new SwitchMaterial(this);
             hold.setText(R.string.wireless_hold);
             hold.setChecked(WirelessDebuggingHold.selected(this));
@@ -790,7 +792,7 @@ public final class MainActivity extends AppCompatActivity {
         wirelessHoldStatus = text(wireless, s(WirelessDebuggingHold.status(this)), 14);
         action(wireless, R.string.developer_options, this::developerOptions);
         action(wireless, R.string.adb_help, () -> info(R.drawable.ic_adb, Look.VIOLET, s(R.string.wireless_title),
-            BuildConfig.WIRELESS_HOLD_SUPPORTED
+            Build.VERSION.SDK_INT < 30 ? s(R.string.android10_root_required) : BuildConfig.WIRELESS_HOLD_SUPPORTED
                 ? s(R.string.wireless_help) + "\n\n" + s(R.string.wireless_hold_setup)
                 : s(R.string.wireless_manual_help)));
     }

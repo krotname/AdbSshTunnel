@@ -14,7 +14,7 @@ forward one local port. The tunnel reaches only this phone's local ADB.
 [Setup guide](docs/USAGE.md) ·
 [Ask a question](https://github.com/krotname/AdbSshTunnel/issues)
 
-**Android 11+** · **arm64-v8a / x86_64** · **Version 2.3.0** · **GPL-3.0**
+**Android 10+ (root) / Android 11+ (no root)** · **armeabi-v7a / arm64-v8a / x86_64** · **Version 2.3.1** · **GPL-3.0**
 
 **Linux phone or desktop?** The [Linux edition](linux/README.md) uses a native,
 adaptive GTK interface and a restricted tunnel to the Linux SDK ADB server.
@@ -37,7 +37,7 @@ rules and imported public keys stay on the device. See the [privacy policy](docs
 
 ## Connect without root
 
-You need an Android 11+ phone, a computer with `adb` and an OpenSSH client,
+You need an Android 10+ phone (root required on Android 10), a computer with `adb` and an OpenSSH client,
 and a network path from the computer to the phone. Start on trusted Wi-Fi.
 
 1. Install the APK from [GitHub Releases](https://github.com/krotname/AdbSshTunnel/releases/latest).

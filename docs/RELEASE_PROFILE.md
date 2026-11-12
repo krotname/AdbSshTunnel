@@ -34,9 +34,10 @@
 | Репозиторий | `krotname/AdbSshTunnel`, public, main |
 | Страница продукта | Публичный репозиторий https://github.com/krotname/AdbSshTunnel; README — основной лендинг, отдельный сайт не используется |
 | Package | `name.krot.adbsshtunnel` |
-| Публичная версия | `app/build.gradle`: 2.3.0 (SemVer 2.0.0) |
-| Android versionCode | 14; отдельное техническое поле |
-| APK | Два варианта `full` и `rustore`, каждый с arm64-v8a и x86_64; package и ключ подписи общие |
+| Публичная версия | `app/build.gradle`: 2.3.1 (SemVer 2.0.0) |
+| Android versionCode | 15; отдельное техническое поле |
+| Android | API 29 / Android 10 и новее; на Android 10 только root, штатная беспроводная отладка без root — с Android 11 |
+| APK | Два варианта `full` и `rustore`, каждый с armeabi-v7a, arm64-v8a и x86_64; package и ключ подписи общие |
 | Сборка | Red / Linux, изолированный непривилегированный ARC job с постоянным кэшем; Windows-сборки только White |
 | Toolchain | SDK 36 / JDK 21 / Java 17 / AGP 8.10.1 / Gradle 8.11.1 |
 | Native | Sshd4a `897f9064a7279bff89538ec87729c43888f3b83d`, NDK 27.2.12479018, CMake 3.22.1 |

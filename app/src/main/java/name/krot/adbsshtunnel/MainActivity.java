@@ -329,7 +329,21 @@ public final class MainActivity extends AppCompatActivity {
         fit.setFillViewport(true);
         fit.addView(content, new FrameLayout.LayoutParams(-1, -1, Gravity.CENTER_HORIZONTAL));
         shell.addView(fit, new FrameLayout.LayoutParams(-1, -1));
-        label(content, s(R.string.app_name), compact ? 20 : 24, true, R.color.ink, 1);
+        LinearLayout header = new LinearLayout(this);
+        header.setGravity(Gravity.CENTER_VERTICAL);
+        content.addView(header, new LinearLayout.LayoutParams(-1, -2));
+        TextView title = label(header, s(R.string.app_name), compact ? 20 : 24, true, R.color.ink, 2);
+        title.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1));
+        ImageButton share = new ImageButton(this);
+        share.setImageResource(R.drawable.ic_share);
+        share.setImageTintList(ColorStateList.valueOf(color(R.color.ink)));
+        android.util.TypedValue background = new android.util.TypedValue();
+        getTheme().resolveAttribute(android.R.attr.selectableItemBackgroundBorderless, background, true);
+        share.setBackgroundResource(background.resourceId);
+        share.setContentDescription(s(R.string.share_connection));
+        share.setTooltipText(s(R.string.share_connection));
+        share.setOnClickListener(v -> shareConnection());
+        header.addView(share, new LinearLayout.LayoutParams(dp(48), dp(48)));
         label(content, s(R.string.tunnel_intro), 14, false, R.color.muted, 2);
         LinearLayout hero = new LinearLayout(this);
         hero.setOrientation(LinearLayout.VERTICAL);
@@ -673,6 +687,32 @@ public final class MainActivity extends AppCompatActivity {
         refresh();
         if (sheet != null) sheet.show();
     }
+    private void shareConnection() {
+        StringBuilder config = new StringBuilder(s(R.string.share_connection_title)).append("\n\n");
+        config.append(s(name.krot.adbsshtunnel.Settings.enabled(this)
+            ? R.string.share_tunnel_on : R.string.share_tunnel_off)).append("\n\n");
+        java.util.Set<String> addresses = new java.util.LinkedHashSet<>();
+        for (NetworkMonitor.Entry entry : networks) {
+            if (entry.decision.allowed) addresses.addAll(entry.addresses);
+        }
+        if (addresses.isEmpty()) config.append(s(R.string.share_no_address)).append("\n");
+        else for (String address : addresses) {
+            config.append(getString(R.string.share_endpoint, address)).append("\n")
+                .append("ssh -N -o StrictHostKeyChecking=yes -o ExitOnForwardFailure=yes")
+                .append(" -L 15555:127.0.0.1:5555 -p 19191 -i YOUR_KEY USER@")
+                .append(address).append("\n\n");
+        }
+        config.append("adb connect 127.0.0.1:15555\n\n")
+            .append(s(R.string.share_client_help)).append("\n\n")
+            .append(s(R.string.host_key)).append("\n").append(hostKey()).append("\n\n")
+            .append(s(R.string.share_host_help)).append("\n\n");
+        if (!rootMode()) config.append(s(Build.VERSION.SDK_INT < 30
+            ? R.string.android10_legacy_setup : R.string.wireless_manual_help)).append("\n");
+        Intent send = new Intent(Intent.ACTION_SEND).setType("text/plain")
+            .putExtra(Intent.EXTRA_SUBJECT, s(R.string.share_connection_title))
+            .putExtra(Intent.EXTRA_TEXT, config.toString().trim());
+        startActivity(Intent.createChooser(send, s(R.string.share_connection)));
+    }
     private void connectSheet() {
         LinearLayout body = sheetBody(SHEET_CONNECT, R.drawable.ic_link, Look.BLUE, R.string.connection_details);
         label(body, s(R.string.connect_step_title), 15, true, R.color.ink, 2);
@@ -767,7 +807,7 @@ public final class MainActivity extends AppCompatActivity {
         action(root, R.string.direct_adb_rules, this::editDirectAdb);
         action(root, R.string.root_status, this::showRootStatus);
         action(root, R.string.adb_help, () -> info(R.drawable.ic_shield, Look.VIOLET, s(R.string.root_adb), s(R.string.root_help)));
-        text(wireless, s(R.string.wireless_short), 15);
+        text(wireless, s(Build.VERSION.SDK_INT < 30 ? R.string.android10_legacy_setup : R.string.wireless_short), 15);
         if (Build.VERSION.SDK_INT >= 30 && BuildConfig.WIRELESS_HOLD_SUPPORTED) {
             SwitchMaterial hold = new SwitchMaterial(this);
             hold.setText(R.string.wireless_hold);
@@ -789,7 +829,8 @@ public final class MainActivity extends AppCompatActivity {
         }
         wirelessHoldStatus = text(wireless, s(WirelessDebuggingHold.status(this)), 14);
         action(wireless, R.string.developer_options, this::developerOptions);
-        action(wireless, R.string.adb_help, () -> info(R.drawable.ic_adb, Look.VIOLET, s(R.string.wireless_title),
+        action(wireless, R.string.adb_help, () -> info(R.drawable.ic_adb, Look.VIOLET,
+            s(Build.VERSION.SDK_INT < 30 ? R.string.legacy_adb_mode : R.string.wireless_title),
             Build.VERSION.SDK_INT < 30 ? s(R.string.android10_legacy_setup) : BuildConfig.WIRELESS_HOLD_SUPPORTED
                 ? s(R.string.wireless_help) + "\n\n" + s(R.string.wireless_hold_setup)
                 : s(R.string.wireless_manual_help)));

@@ -73,6 +73,10 @@ and a network path from the computer to the phone. Start on trusted Wi-Fi.
    ```
 
 Replace `PHONE_IP`, `PAIR_PORT`, `YOUR_KEY` and `USER` with your connection values.
+The share icon at the top right of the home screen sends this phone's connection
+configuration through Android's share menu: allowed network addresses, SSH/ADB
+commands, the public server key and setup instructions. It includes no private
+keys or passwords. Verify the server fingerprint through a trusted channel.
 The SSH forwarding target stays **`127.0.0.1:5555`**: the app maps it to Android's
 current local ADB port. The pairing port is separate. When Android changes the
 connect port, reopen SSH using the same command.

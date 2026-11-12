@@ -18,7 +18,7 @@ ADB. Это сервер SDK в Linux, а не Android adbd; команды и �
 [Подробная инструкция](docs/USAGE.md) ·
 [Задать вопрос](https://github.com/krotname/AdbSshTunnel/issues)
 
-**Android 11+** · **arm64-v8a / x86_64** · **Версия 2.2.0** · **GPL-3.0**
+**Android 11+** · **arm64-v8a / x86_64** · **Версия 2.3.0** · **GPL-3.0**
 
 ## Возможности
 

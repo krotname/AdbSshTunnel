@@ -2,7 +2,7 @@
 
 ## Linux
 
-- Версия Linux: `linux/adb_ssh_tunnel/__init__.py`, **2.2.0**; Android 2.2.0.
+- Версия Linux: `linux/adb_ssh_tunnel/__init__.py`, **2.2.0**; Android 2.3.0.
 - App ID `name.krot.adbsshtunnel.linux`, Debian package `adb-ssh-tunnel`.
 - Артефакты: `adb-ssh-tunnel_2.2.0_arm64.deb` и `adb-ssh-tunnel_2.2.0_amd64.deb`,
   `SHA256SUMS` и manifest с точным source SHA, версиями зависимостей и проверками.
@@ -34,8 +34,8 @@
 | Репозиторий | `krotname/AdbSshTunnel`, public, main |
 | Страница продукта | Публичный репозиторий https://github.com/krotname/AdbSshTunnel; README — основной лендинг, отдельный сайт не используется |
 | Package | `name.krot.adbsshtunnel` |
-| Публичная версия | `app/build.gradle`: 2.2.0 (SemVer 2.0.0) |
-| Android versionCode | 13; отдельное техническое поле |
+| Публичная версия | `app/build.gradle`: 2.3.0 (SemVer 2.0.0) |
+| Android versionCode | 14; отдельное техническое поле |
 | APK | Два варианта `full` и `rustore`, каждый с arm64-v8a и x86_64; package и ключ подписи общие |
 | Сборка | Red / Linux, изолированный непривилегированный ARC job с постоянным кэшем; Windows-сборки только White |
 | Toolchain | SDK 36 / JDK 21 / Java 17 / AGP 8.10.1 / Gradle 8.11.1 |

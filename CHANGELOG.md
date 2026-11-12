@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 2.3.0
 
 - Animated power button: a rotating glow while the tunnel connects, a soft breathing glow when it is ready and a smooth fade when it turns off. Colours change smoothly; the glow stays still when system animations are off.
 - Plain-language errors: every problem says what happened and what to do, with an icon, a button that opens the right screen and the original message under "Technical details".

@@ -1,6 +1,6 @@
 # Android → Linux feature contract
 
-Linux version 2.2.0 is a separate implementation; Android is 2.2.0.
+Linux version 2.2.0 is a separate implementation; Android is 2.3.0.
 
 | Android feature | Linux implementation |
 |---|---|

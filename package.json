@@ -1,0 +1,14 @@
+{
+  "name": "adb-ssh-tunnel-specs",
+  "private": true,
+  "scripts": {
+    "spec:validate": "openspec validate --all --strict --no-interactive --concurrency 1",
+    "spec:test": "python tools/test-openspec.py"
+  },
+  "devDependencies": {
+    "@fission-ai/openspec": "2.0.0"
+  },
+  "engines": {
+    "node": ">=22.12.0"
+  }
+}

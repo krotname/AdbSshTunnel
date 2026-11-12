@@ -11,3 +11,5 @@ local.properties
 vendor/
 .idea/
 state/
+node_modules/
+__pycache__/

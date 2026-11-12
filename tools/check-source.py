@@ -5,7 +5,7 @@ import re
 import xml.etree.ElementTree as ET
 
 root = Path(__file__).resolve().parents[1]
-files = [p for p in root.rglob('*') if p.is_file() and not any(x in p.relative_to(root).parts for x in ('.git', 'vendor', '.gradle', 'build', 'state'))]
+files = [p for p in root.rglob('*') if p.is_file() and not any(x in p.relative_to(root).parts for x in ('.git', 'vendor', '.gradle', 'build', 'state', 'node_modules', '__pycache__'))]
 for p in files:
     if p.suffix == '.xml': ET.parse(p)
     if p.suffix == '.py': ast.parse(p.read_text(), filename=str(p))

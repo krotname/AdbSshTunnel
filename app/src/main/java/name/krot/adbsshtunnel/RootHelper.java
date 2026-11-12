@@ -45,10 +45,7 @@ public final class RootHelper {
     }
     public static void verifyGuard() throws IOException, InterruptedException { run(CONTROLLER, Operation.CHECK, null); }
     private static File extract(Context context) throws IOException {
-        String abi = null;
-        for (String candidate : Build.SUPPORTED_ABIS)
-            if (candidate.equals("arm64-v8a") || candidate.equals("x86_64")) { abi = candidate; break; }
-        if (abi == null) throw new IOException("Unsupported controller ABI");
+        String abi = controllerAbi(Build.SUPPORTED_ABIS);
         File binary = File.createTempFile("root-controller-", ".bin", context.getCacheDir());
         try (InputStream source = context.getAssets().open(abi + "/root-controller");
              FileOutputStream output = new FileOutputStream(binary)) {
@@ -58,6 +55,11 @@ public final class RootHelper {
             if (size == 0 || !binary.setExecutable(true, true)) throw new IOException("Cannot prepare root controller");
             return binary;
         } catch (IOException e) { binary.delete(); throw e; }
+    }
+    static String controllerAbi(String[] supported) throws IOException {
+        for (String candidate : supported)
+            if (candidate.equals("arm64-v8a") || candidate.equals("armeabi-v7a") || candidate.equals("x86_64")) return candidate;
+        throw new IOException("Unsupported controller ABI");
     }
     private static String run(String binary, Operation operation, String policy) throws IOException, InterruptedException {
         // Both binary paths originate in this class, not in user input.

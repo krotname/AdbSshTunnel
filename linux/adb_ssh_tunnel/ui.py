@@ -18,7 +18,7 @@ from gi.repository import Adw, Gdk, Gio, GLib, Graphene, Gsk, Gtk, Pango
 
 from . import __version__
 from .core import (APP_ID, USERNAME, current_network, default_config,
-                   load_config, normalize_key, read_status, save_config)
+                   load_config, normalize_key, read_status, save_config, validate_config)
 from .messages import Debounce, classify, shown_tone
 import asyncssh
 
@@ -917,16 +917,22 @@ class Application(Adw.Application):
 
     def change_port(self, entry):
         try:
-            port = int(entry.get_text().strip())
-            candidate = dict(self.cfg, port=port)
-            save_config(candidate)
-            self.cfg = candidate
-            self.port_error.set_visible(False)
-            self.message(self.t('Port saved', 'Порт сохранён'))
-        except (OSError, ValueError):
+            candidate = validate_config(dict(self.cfg, port=int(entry.get_text().strip())))
+        except ValueError:
             self.port_error.set_text(self.t('Use a number from 1024 to 65535, except 5037.',
                                             'Укажите число от 1024 до 65535, кроме 5037.'))
             self.port_error.set_visible(True)
+            return
+        try:
+            save_config(candidate)
+        except (OSError, ValueError) as exc:
+            # A write failure is not a bad number: show the real reason.
+            self.port_error.set_text(self.t('Could not save the port: ', 'Не удалось сохранить порт: ') + str(exc))
+            self.port_error.set_visible(True)
+            return
+        self.cfg = candidate
+        self.port_error.set_visible(False)
+        self.message(self.t('Port saved', 'Порт сохранён'))
 
     def change_mode(self, row, _):
         self.cfg['mode'] = ('allowlist', 'blocklist', 'disabled')[row.get_selected()]

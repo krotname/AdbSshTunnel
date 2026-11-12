@@ -903,7 +903,7 @@ public final class MainActivity extends AppCompatActivity {
         action(preferences, R.string.quick_settings, this::addTile);
         action(preferences, R.string.host_key, this::showHostKey);
         action(preferences, R.string.status_details, this::showStatus);
-        action(preferences, R.string.about_title, () -> info(R.drawable.ic_tunnel, Look.ORANGE, s(R.string.about_title),
+        action(preferences, R.string.about_title, () -> info(R.drawable.ic_info, Look.ORANGE, s(R.string.about_title),
             getString(R.string.about_version, versionName()) + "\n\n" + s(R.string.about)));
     }
     private void showHostKey() {

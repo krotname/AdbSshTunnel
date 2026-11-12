@@ -14,7 +14,7 @@ forward one local port. The tunnel reaches only this phone's local ADB.
 [Setup guide](docs/USAGE.md) ·
 [Ask a question](https://github.com/krotname/AdbSshTunnel/issues)
 
-**Android 10+** · **armeabi-v7a / arm64-v8a / x86_64** · **Version 2.3.1** · **GPL-3.0**
+**Android 10+** · **armeabi-v7a / arm64-v8a / x86_64** · **Version 2.4.0** · **GPL-3.0**
 
 **Linux phone or desktop?** The [Linux edition](linux/README.md) uses a native,
 adaptive GTK interface and a restricted tunnel to the Linux SDK ADB server.

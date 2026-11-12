@@ -64,6 +64,8 @@ public final class MainActivity extends AppCompatActivity {
     private ValueAnimator tint;
     private int[] shownColors;
     private UiText.Tone shownTone;
+    /** Between onStart and onStop; late background callbacks must not restart the glow. */
+    private boolean visible;
     private UiText.Problem shownProblem;
     private TextView headline, status, hint;
     private MaterialButton problemChip;
@@ -481,7 +483,7 @@ public final class MainActivity extends AppCompatActivity {
         return new int[]{color(start), color(end), color(text)};
     }
     private void paintPower(UiText.Tone tone) {
-        if (power == null || tone == shownTone) return;
+        if (power == null || !visible || tone == shownTone) return;
         boolean animate = shownTone != null && shownColors != null && ValueAnimator.areAnimatorsEnabled();
         shownTone = tone;
         int[] target = toneColors(tone);
@@ -521,16 +523,16 @@ public final class MainActivity extends AppCompatActivity {
     private void showProblemChip(UiText.Problem problem) {
         if (problemChip == null || problem == shownProblem) return;
         shownProblem = problem;
-        boolean visible = problem != UiText.Problem.NONE;
-        if (visible) {
+        boolean shown = problem != UiText.Problem.NONE;
+        if (shown) {
             problemChip.setText(problem.title);
             if (problemChip.getVisibility() != View.VISIBLE && ValueAnimator.areAnimatorsEnabled()) {
                 problemChip.setAlpha(0f);
                 problemChip.animate().alpha(1f).setDuration(250).start();
             }
         }
-        problemChip.setVisibility(visible ? View.VISIBLE : View.GONE);
-        status.setVisibility(visible ? View.GONE : View.VISIBLE);
+        problemChip.setVisibility(shown ? View.VISIBLE : View.GONE);
+        status.setVisibility(shown ? View.GONE : View.VISIBLE);
     }
     private void showStatus() {
         String state = SshdService.state;
@@ -1117,6 +1119,7 @@ public final class MainActivity extends AppCompatActivity {
     }
     @Override protected void onStart() {
         super.onStart();
+        visible = true;
         ContextCompat.registerReceiver(this, receiver, new IntentFilter("name.krot.adbsshtunnel.STATE"),
             ContextCompat.RECEIVER_NOT_EXPORTED);
         watchNetworks(); refresh();
@@ -1128,6 +1131,7 @@ public final class MainActivity extends AppCompatActivity {
     @Override protected void onStop() {
         if (networkMonitor != null) networkMonitor.close();
         networkMonitor = null; unregisterReceiver(receiver);
+        visible = false;
         if (tint != null) { tint.cancel(); tint = null; }
         if (glow != null) glow.stop();
         if (power != null) { power.animate().cancel(); power.setScaleX(1f); power.setScaleY(1f); }

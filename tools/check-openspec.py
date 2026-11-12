@@ -19,6 +19,11 @@ DOC_SUFFIXES = frozenset((
     '.jpeg', '.gif', '.webp', '.ico', '.license',
 ))
 BEHAVIORAL_TEXT = frozenset(('AGENTS.md', 'CLAUDE.md', 'SKILL.md', 'CMakeLists.txt'))
+ANDROID_TOOLS = frozenset((
+    'tools/tunnel-target.h', 'tools/tunnel-parent.h', 'tools/prepare-native.py',
+    'tools/test-tunnel-parent.c', 'tools/test-root-controller.c',
+    'tools/TestHostKeyPublic.java',
+))
 
 
 def scope(path: str) -> frozenset[str]:
@@ -27,7 +32,7 @@ def scope(path: str) -> frozenset[str]:
         parts.suffix.lower() in DOC_SUFFIXES or parts.name in ('LICENSE', 'NOTICE')
     ):
         return frozenset()
-    if path.startswith(('app/', 'adaway/')):
+    if path.startswith(('app/', 'adaway/')) or path in ANDROID_TOOLS:
         return ANDROID
     if path.startswith('linux/'):
         return LINUX

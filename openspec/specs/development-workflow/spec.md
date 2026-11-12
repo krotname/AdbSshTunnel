@@ -30,6 +30,10 @@ key-security specs MAY cover either product. Deleted or archived deltas SHALL
 provide no coverage. Active deltas used for coverage SHALL have a proposal,
 design and task list.
 
+#### Scenario: Native Android implementation stored under tools
+- **WHEN** Android tunnel headers, native patch preparation or their regression tools change under `tools/`
+- **THEN** Android capability coverage is required and a workflow-only spec edit does not satisfy it
+
 #### Scenario: Code changes without matching specification changes
 - **WHEN** Android implementation changes while only a Linux or workflow spec changes
 - **THEN** CI rejects the uncovered Android change

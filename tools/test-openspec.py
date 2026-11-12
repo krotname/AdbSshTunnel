@@ -56,6 +56,14 @@ class GateTest(unittest.TestCase):
             'openspec/specs/key-security/spec.md',
         ]))
 
+    def test_android_native_tools_require_product_specs(self):
+        android = 'openspec/specs/android-tunnel/spec.md'
+        workflow = 'openspec/specs/development-workflow/spec.md'
+        for path in gate.ANDROID_TOOLS:
+            with self.subTest(path=path):
+                self.assertEqual([], gate.check(self.root, [path, android]))
+                self.assertTrue(gate.check(self.root, [path, workflow]))
+
     def test_deleted_archived_and_unrelated_files_cannot_cover_code(self):
         for path in ('openspec/changes/archive/old/specs/android-tunnel/spec.md',
                      'openspec/specs/android-tunnel/notes.md',

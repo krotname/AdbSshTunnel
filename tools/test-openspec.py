@@ -36,7 +36,8 @@ class GateTest(unittest.TestCase):
     def test_uncovered_code_and_instructions_fail(self):
         for path in ('app/src/main/X.java', 'linux/adb_ssh_tunnel/core.py',
                      'tools/ci-build.sh', '.github/workflows/ci.yml',
-                     'package-lock.json', 'AGENTS.md', '.agents/skills/x/SKILL.md'):
+                     'package-lock.json', 'AGENTS.md', '.agents/skills/x/SKILL.md',
+                     'app/src/main/cpp/CMakeLists.txt', 'openspec/config.yaml'):
             with self.subTest(path=path):
                 self.assertTrue(gate.check(self.root, [path]))
 

@@ -18,14 +18,12 @@ DOC_SUFFIXES = frozenset((
     '.md', '.mdx', '.rst', '.adoc', '.txt', '.pdf', '.svg', '.png', '.jpg',
     '.jpeg', '.gif', '.webp', '.ico', '.license',
 ))
-INSTRUCTIONS = frozenset(('AGENTS.md', 'CLAUDE.md', 'SKILL.md'))
+BEHAVIORAL_TEXT = frozenset(('AGENTS.md', 'CLAUDE.md', 'SKILL.md', 'CMakeLists.txt'))
 
 
 def scope(path: str) -> frozenset[str]:
     parts = PurePosixPath(path)
-    if parts.parts[0] == 'openspec':
-        return frozenset()
-    if parts.name not in INSTRUCTIONS and (
+    if parts.name not in BEHAVIORAL_TEXT and (
         parts.suffix.lower() in DOC_SUFFIXES or parts.name in ('LICENSE', 'NOTICE')
     ):
         return frozenset()

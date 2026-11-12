@@ -1,0 +1,28 @@
+schema: spec-driven
+
+context: |
+  ADB SSH Tunnel has two distinct products in this repository.
+  Android: Java, native C, Gradle, Android 11+, full and RuStore flavors.
+  Linux: Python, AsyncSSH, GTK 4/Libadwaita, user systemd service, Debian packages.
+  Android forwards the virtual destination 127.0.0.1:5555 to local Android adbd.
+  Linux forwards only 127.0.0.1:5037, the Linux SDK ADB server protocol.
+  SSH is key-only and forwarding-only. Network policy fails closed.
+  Android and Linux key and network policies have documented differences.
+  Existing tests and device acceptance evidence determine verified behavior.
+  CI uses one repository-scoped Red ARC runner and its existing persistent cache.
+  Never put private keys, personal device identifiers or deployment secrets here.
+
+rules:
+  proposal:
+    - State affected capabilities and whether Android, Linux or both change.
+    - Describe observable behavior, compatibility and security consequences.
+  specs:
+    - Use SHALL requirements and explicit WHEN/THEN scenarios.
+    - Include denied access, revocation and recovery scenarios where applicable.
+    - Keep Android adbd and the Linux SDK ADB server protocols distinct.
+  design:
+    - Link owning source files and existing tests or acceptance procedures.
+    - Preserve fail-closed behavior and the existing CI/cache contract.
+  tasks:
+    - Include positive and negative tests and the exact limits of device evidence.
+    - Distinguish CI, merge, signed packages, installation and publication.

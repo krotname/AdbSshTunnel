@@ -27,8 +27,27 @@ jobs:
       - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
         with:
           persist-credentials: false
+          fetch-depth: 0
       - name: Verify Red cache contract
         run: arc-cache check-workflow --file .github/workflows/ci.yml --job "$GITHUB_JOB"
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: '24'
+          package-manager-cache: false
+      - name: Mandatory OpenSpec validation and change coverage
+        shell: bash
+        env:
+          OPENSPEC_TELEMETRY: '0'
+          SPEC_BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+        run: |
+          npm ci --ignore-scripts --no-audit --no-fund
+          npm run spec:validate
+          python3 tools/test-openspec.py
+          if [[ "$GITHUB_EVENT_NAME" == workflow_dispatch ]]; then
+            python3 tools/check-openspec.py --snapshot
+          else
+            python3 tools/check-openspec.py --base "$SPEC_BASE_SHA"
+          fi
       - name: Native connection lifecycle regression
         shell: bash
         run: |

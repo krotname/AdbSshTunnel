@@ -1,5 +1,7 @@
 # ADB SSH Tunnel
 
+Development: [OpenSpec contract and mandatory CI checks](openspec/README.md).
+
 **English** · [Русский](README.ru.md)
 
 ![ADB SSH Tunnel: trusted computer → key-only SSH → local Android ADB](docs/images/overview.svg)

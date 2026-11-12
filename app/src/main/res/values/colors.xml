@@ -16,5 +16,6 @@
     <color name="tone_ready">#047857</color>
     <color name="tone_working">#B45309</color>
     <color name="tone_attention">#BE123C</color>
+    <color name="problem_bg">#FFE4E6</color>
     <color name="tone_off">#374151</color>
 </resources>

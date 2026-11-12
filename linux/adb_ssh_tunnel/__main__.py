@@ -9,11 +9,13 @@ from . import __version__
 def main():
     parser = argparse.ArgumentParser(description='Key-only SSH access to the local Linux ADB server')
     parser.add_argument('--version', action='version', version=__version__)
+    parser.add_argument('--hidden', action='store_true',
+                        help='Start without showing the window (Snap autostart)')
     parser.add_argument('command', nargs='?', choices=('gui', 'serve', 'status'), default='gui')
     args = parser.parse_args()
     if args.command == 'gui':
         from .ui import Application
-        return Application().run(None)
+        return Application(hidden=args.hidden).run(None)
     from .core import Gateway, read_status
     if args.command == 'status':
         print(json.dumps(read_status(), ensure_ascii=False))

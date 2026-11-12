@@ -1,6 +1,6 @@
 # Android → Linux feature contract
 
-Linux version 2.5.0 is a separate implementation with the Android 2.3.0 look; Android is 2.4.0.
+Linux version 2.6.0 is a separate implementation with the Android 2.3.0 look; Android is 2.4.0.
 
 | Android feature | Linux implementation |
 |---|---|
@@ -11,7 +11,7 @@ Linux version 2.5.0 is a separate implementation with the Android 2.3.0 look; An
 | Root adbd/controller | Not applicable; does not create adbd or change system sshd |
 | USB-debugging and key-expiry retention | Not applicable; manage attached Android debugging on Android itself |
 | Status, diagnostics and start/stop | Adaptive GTK UI with the Android power button, glow and tiles; actual SDK version/devices, SSH connections, host fingerprint; plain-language errors with technical details |
-| Background service/boot | Per-user systemd service, explicit start/stop and optional sign-in autostart; no root/linger change |
+| Background service/boot | Per-user systemd service (Debian) or supervised Snap child process (Snap), explicit start/stop and optional sign-in autostart; no root/linger change |
 | Quick Settings tile | Native Linux desktop/mobile launcher with stable app ID; no Android tile |
 | Russian/English | System language or explicit RU/EN selection |
 | Private local settings and stable host key | Mode 0700 directory, mode 0600 files, persistent Ed25519 host key; preserved on upgrade |

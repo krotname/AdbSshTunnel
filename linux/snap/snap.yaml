@@ -1,0 +1,37 @@
+name: adb-ssh-tunnel
+version: '__VERSION__'
+summary: Key-only SSH tunnel to the local Linux ADB server
+description: |-
+  ADB SSH Tunnel exposes your Linux SDK ADB server to trusted computers
+  through a restricted key-only SSH gateway. The adaptive GTK 4 /
+  Libadwaita window mirrors the Android app: a large round power button,
+  four tiles and plain-language problem screens that say what happened
+  and what to do.
+  .
+  Only the username `adb`, imported OpenSSH public keys and the exact
+  target 127.0.0.1:5037 work. SSH shell, PTY, SFTP/SCP, agent, X11 and
+  reverse forwarding are rejected, and the system SSH stays independent.
+  The tunnel runs as your user: closing the window keeps an enabled
+  tunnel running, and Start at sign-in brings it back after login.
+  .
+  Snap settings live separately under ~/snap/adb-ssh-tunnel and are
+  never migrated from the Debian package.
+base: core24
+grade: stable
+confinement: strict
+architectures: [__ARCH__]
+apps:
+  adb-ssh-tunnel:
+    command: bin/adb-ssh-tunnel
+    autostart: adb-ssh-tunnel.desktop
+    plugs: [network, network-bind, network-manager-observe, desktop, desktop-legacy,
+            x11, wayland, opengl, gnome-46-2404, gpu-2404]
+plugs:
+  gnome-46-2404:
+    interface: content
+    target: $SNAP/gnome-platform
+    default-provider: gnome-46-2404
+  gpu-2404:
+    interface: content
+    target: $SNAP/gpu-2404
+    default-provider: mesa-2404

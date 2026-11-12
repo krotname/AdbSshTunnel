@@ -16,6 +16,7 @@ from typing import Callable
 
 import asyncssh
 from cryptography.hazmat.primitives.serialization import load_ssh_public_key
+from .service import ioctl_ipv4_address, nm_connection_identity
 
 ADB_HOST = '127.0.0.1'
 ADB_PORT = 5037
@@ -51,6 +52,11 @@ def config_dir() -> Path:
 
 
 def runtime_dir() -> Path:
+    # Inside the Snap, XDG_RUNTIME_DIR is shared with the Debian package on
+    # the same machine, so the Snap keeps its own status, PID file and
+    # daemon lock under its private data directory instead.
+    if os.environ.get('SNAP') and os.environ.get('SNAP_USER_DATA'):
+        return Path(os.environ['SNAP_USER_DATA']) / 'runtime'
     base = os.environ.get('XDG_RUNTIME_DIR')
     return Path(base) / 'adb-ssh-tunnel' if base else config_dir() / 'runtime'
 
@@ -157,6 +163,8 @@ def _fields(line: str) -> list[str]:
 
 def current_network() -> Network:
     """Identify the IPv4 default-route interface without sending network traffic."""
+    if os.environ.get('SNAP'):
+        return snap_network()
     try:
         route = json.loads(_command('ip', '-j', '-4', 'route', 'get', '1.1.1.1'))[0]
         iface, address = route['dev'], route.get('prefsrc', '')
@@ -181,6 +189,98 @@ def current_network() -> Network:
         return Network()
     except (OSError, ValueError, KeyError, IndexError, subprocess.SubprocessError):
         return Network()
+
+
+def snap_network() -> Network:
+    """Identify the current network inside the strictly confined Snap.
+
+    The Snap cannot execute ``ip`` or ``nmcli`` and raw netlink is blocked,
+    so it reads NetworkManager over the system bus (the
+    ``network-manager-observe`` interface) with a procfs/ioctl fallback for
+    the local address. Any failure stays fail-closed with no identity.
+    """
+    try:
+        from gi.repository import Gio, GLib  # noqa: E402  (platform bindings, Snap only)
+    except (ImportError, ValueError):
+        return Network()
+    try:
+        bus = Gio.bus_get_sync(Gio.BusType.SYSTEM, None)
+
+        def proxy(path, interface):
+            return Gio.DBusProxy.new_sync(bus, Gio.DBusProxyFlags.NONE, None,
+                                          'org.freedesktop.NetworkManager', path,
+                                          interface, None)
+
+        def props(path):
+            return proxy(path, 'org.freedesktop.DBus.Properties')
+
+        def get(path, interface, name):
+            return props(path).call_sync(
+                'Get', GLib.Variant('(ss)', (interface, name)),
+                Gio.DBusCallFlags.NONE, 3000, None).unpack()[0]
+
+        primary = get('/org/freedesktop/NetworkManager',
+                      'org.freedesktop.NetworkManager', 'PrimaryConnection')
+        if not primary or primary == '/':
+            return Network()
+        settings_path = get(primary, 'org.freedesktop.NetworkManager.Connection.Active',
+                            'Connection')
+        devices = get(primary, 'org.freedesktop.NetworkManager.Connection.Active',
+                      'Devices')
+        if not devices:
+            return Network()
+        settings = proxy(settings_path, 'org.freedesktop.NetworkManager.Settings.Connection')
+        data = settings.call_sync(
+            'GetSettings', None, Gio.DBusCallFlags.NONE, 3000, None).unpack()[0]
+
+        def value(raw):
+            return raw.unpack() if hasattr(raw, 'unpack') else raw
+
+        connection = data.get('connection', {})
+        kind = str(value(connection.get('type', '')))
+        uuid = str(value(connection.get('uuid', '')))
+        iface = str(get(devices[0], 'org.freedesktop.NetworkManager.Device', 'Interface'))
+        ssid = ''
+        if kind == '802-11-wireless':
+            ap_path = get(devices[0], 'org.freedesktop.NetworkManager.Device.Wireless',
+                          'ActiveAccessPoint')
+            if ap_path and ap_path != '/':
+                raw = bytes(get(ap_path, 'org.freedesktop.NetworkManager.AccessPoint',
+                                'Ssid'))
+                ssid = raw.decode('utf-8', 'replace')
+        address = ''
+        try:
+            ip4_path = get(devices[0], 'org.freedesktop.NetworkManager.Device', 'Ip4Config')
+            if ip4_path and ip4_path != '/':
+                ip4 = proxy(ip4_path, 'org.freedesktop.NetworkManager.IP4Config')
+                entries = ip4.call_sync(
+                    'GetAddressData', None, Gio.DBusCallFlags.NONE, 3000, None).unpack()[0]
+                if entries:
+                    address = str(value(entries[0].get('address', '')))
+        except Exception:
+            address = ''
+        if not address and iface:
+            try:
+                address = ioctl_ipv4_address(iface)
+            except OSError:
+                address = ''
+        return nm_build_network(kind, uuid, ssid, address, iface)
+    except Exception:
+        return Network()
+
+
+def nm_build_network(kind: str, uuid: str, ssid: str, address: str, iface: str) -> Network:
+    """Assemble a Network from NetworkManager facts; fail closed."""
+    identity = nm_connection_identity(kind, uuid, ssid)
+    if not identity or not iface:
+        return Network()
+    try:
+        ip = ipaddress.IPv4Address(address)
+    except ValueError:
+        return Network()
+    if ip.is_loopback or ip.is_unspecified or ip.is_multicast:
+        return Network()
+    return Network(identity, address, iface)
 
 
 async def adb_request(request: str) -> str:

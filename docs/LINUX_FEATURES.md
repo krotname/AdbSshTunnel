@@ -1,6 +1,6 @@
 # Android → Linux feature contract
 
-Linux version 2.3.0 is a separate implementation with the Android 2.3.0 look; Android is 2.3.0.
+Linux version 2.3.1 is a separate implementation with the Android 2.3.0 look; Android is 2.3.0.
 
 | Android feature | Linux implementation |
 |---|---|

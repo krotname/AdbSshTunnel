@@ -1,14 +1,14 @@
 package name.krot.adbsshtunnel;
 
 import android.Manifest;
-import android.animation.ObjectAnimator;
-import android.animation.PropertyValuesHolder;
+import android.animation.ArgbEvaluator;
 import android.animation.ValueAnimator;
 import android.app.StatusBarManager;
 import android.content.*;
 import android.content.pm.PackageManager;
 import android.content.res.ColorStateList;
 import android.content.res.Configuration;
+import android.graphics.Color;
 import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
 import android.graphics.drawable.Icon;
@@ -16,8 +16,12 @@ import android.graphics.drawable.InsetDrawable;
 import android.net.Uri;
 import android.os.*;
 import android.provider.Settings;
+import android.text.Editable;
 import android.text.TextUtils;
+import android.text.TextWatcher;
 import android.view.*;
+import android.view.animation.DecelerateInterpolator;
+import android.view.animation.OvershootInterpolator;
 import android.widget.*;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.appcompat.app.AppCompatDelegate;
@@ -31,6 +35,7 @@ import com.google.android.material.bottomsheet.BottomSheetDialog;
 import com.google.android.material.button.MaterialButton;
 import com.google.android.material.button.MaterialButtonToggleGroup;
 import com.google.android.material.card.MaterialCardView;
+import com.google.android.material.progressindicator.LinearProgressIndicator;
 import com.google.android.material.switchmaterial.SwitchMaterial;
 import com.google.android.material.textfield.*;
 import com.hardbacknutter.sshd.SshdService;
@@ -40,13 +45,28 @@ import java.util.*;
 public final class MainActivity extends AppCompatActivity {
     private static final String SHEET_CONNECT = "connect", SHEET_ACCESS = "access",
         SHEET_ADB = "adb", SHEET_MORE = "more";
+    /** Colour family of a sheet or pane: strong accent, soft background, filled button. */
+    private enum Look {
+        BLUE(R.color.tile_blue, R.color.tile_blue_bg, R.color.tile_blue),
+        GREEN(R.color.tile_green, R.color.tile_green_bg, R.color.tone_ready),
+        VIOLET(R.color.tile_violet, R.color.tile_violet_bg, R.color.tile_violet),
+        ORANGE(R.color.tile_orange, R.color.tile_orange_bg, R.color.tone_working),
+        ROSE(R.color.tone_attention, R.color.problem_bg, R.color.tone_attention);
+        final int strong, soft, button;
+        Look(int strong, int soft, int button) { this.strong = strong; this.soft = soft; this.button = button; }
+    }
     private String openSheet;
     private BottomSheetDialog sheet;
-    private View halo, core;
+    private final List<BottomSheetDialog> panes = new ArrayList<>();
+    private PowerGlow glow;
+    private GradientDrawable fill;
     private FrameLayout power;
-    private ValueAnimator pulse;
+    private ValueAnimator tint;
+    private int[] shownColors;
     private UiText.Tone shownTone;
+    private UiText.Problem shownProblem;
     private TextView headline, status, hint;
+    private MaterialButton problemChip;
     private TextView accessTile, adbTile, moreTile;
     private TextView wifiSummary, mobileSummary, rootStatus, wirelessHoldStatus, networkNow;
     private SwitchMaterial persistentAdb, persistentUsb;
@@ -62,6 +82,7 @@ public final class MainActivity extends AppCompatActivity {
     private int dp(int value) { return Math.round(value * getResources().getDisplayMetrics().density); }
     private String s(int resource) { return getString(resource); }
     private int color(int resource) { return ContextCompat.getColor(this, resource); }
+    private static int fade(int color, int alpha) { return (color & 0x00FFFFFF) | (alpha << 24); }
     private TextView text(LinearLayout parent, String value, int size) {
         TextView view = new TextView(this);
         view.setText(value); view.setTextSize(size);
@@ -78,29 +99,11 @@ public final class MainActivity extends AppCompatActivity {
         parent.addView(view, new LinearLayout.LayoutParams(-1, -2));
         return view;
     }
-    private MaterialButton button(LinearLayout parent, int label, Runnable action) {
-        MaterialButton view = new MaterialButton(this);
-        view.setText(label); view.setAllCaps(false);
-        view.setCornerRadius(dp(16));
-        view.setOnClickListener(v -> action.run());
-        parent.addView(view, new LinearLayout.LayoutParams(-1, -2));
-        return view;
-    }
-    private void message(String message) {
-        new androidx.appcompat.app.AlertDialog.Builder(this).setMessage(UiText.status(this, message))
-            .setPositiveButton(R.string.close, null).show();
-    }
-    private void detail(int title, String value) {
-        TextView body = new TextView(this);
-        body.setText(value); body.setTextSize(15); body.setTextIsSelectable(true);
-        body.setPadding(dp(20), dp(12), dp(20), dp(12));
-        ScrollView scroll = new ScrollView(this);
-        scroll.addView(body);
-        new androidx.appcompat.app.AlertDialog.Builder(this).setTitle(title).setView(scroll)
-            .setPositiveButton(R.string.close, null).show();
-    }
     /** Large rounded row button used inside the bottom sheets. */
     private MaterialButton action(LinearLayout parent, int label, Runnable run) {
+        return action(parent, s(label), run);
+    }
+    private MaterialButton action(LinearLayout parent, CharSequence label, Runnable run) {
         MaterialButton view = new MaterialButton(this);
         view.setText(label); view.setAllCaps(false); view.setTextSize(16);
         view.setGravity(Gravity.START | Gravity.CENTER_VERTICAL);
@@ -126,6 +129,172 @@ public final class MainActivity extends AppCompatActivity {
         view.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
         view.setLayoutParams(new LinearLayout.LayoutParams(size, size));
         return view;
+    }
+
+    /** Filled main button of a pane. */
+    private MaterialButton primary(LinearLayout parent, Look look, CharSequence label, Runnable run) {
+        MaterialButton view = new MaterialButton(this);
+        view.setText(label); view.setAllCaps(false); view.setTextSize(16);
+        view.setBackgroundTintList(ColorStateList.valueOf(color(look.button)));
+        view.setTextColor(color(R.color.screen));
+        view.setCornerRadius(dp(16)); view.setMinHeight(dp(56));
+        view.setOnClickListener(v -> run.run());
+        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(-1, -2);
+        params.topMargin = dp(12);
+        parent.addView(view, params);
+        return view;
+    }
+    /** Outlined second button of a pane. */
+    private MaterialButton secondary(LinearLayout parent, Look look, CharSequence label, Runnable run) {
+        MaterialButton view = new MaterialButton(this, null,
+            com.google.android.material.R.attr.materialButtonOutlinedStyle);
+        view.setText(label); view.setAllCaps(false); view.setTextSize(16);
+        view.setTextColor(color(look.button));
+        view.setStrokeColor(ColorStateList.valueOf(color(look.button)));
+        view.setStrokeWidth(dp(1));
+        view.setRippleColor(ColorStateList.valueOf(fade(color(look.button), 0x22)));
+        view.setCornerRadius(dp(16)); view.setMinHeight(dp(56));
+        view.setOnClickListener(v -> run.run());
+        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(-1, -2);
+        params.topMargin = dp(4);
+        parent.addView(view, params);
+        return view;
+    }
+    private TextView para(LinearLayout parent, CharSequence value) {
+        TextView view = new TextView(this);
+        view.setText(value); view.setTextSize(15); view.setTextColor(color(R.color.ink));
+        view.setLineSpacing(0, 1.15f); view.setTextIsSelectable(true);
+        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(-1, -2);
+        params.bottomMargin = dp(8);
+        parent.addView(view, params);
+        return view;
+    }
+    private TextView section(LinearLayout parent, int title, Look look) {
+        TextView view = new TextView(this);
+        view.setText(title); view.setTextSize(14); view.setTextColor(color(look.strong));
+        view.setTypeface(Typeface.create("sans-serif-medium", Typeface.BOLD));
+        ViewCompat.setAccessibilityHeading(view, true);
+        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(-1, -2);
+        params.topMargin = dp(8); params.bottomMargin = dp(4);
+        parent.addView(view, params);
+        return view;
+    }
+    private TextView codeBox(LinearLayout parent, String value) {
+        TextView view = new TextView(this);
+        view.setText(value); view.setTextSize(13); view.setTypeface(Typeface.MONOSPACE);
+        view.setTextColor(color(R.color.ink)); view.setTextIsSelectable(true);
+        GradientDrawable box = new GradientDrawable();
+        box.setColor(color(R.color.code)); box.setCornerRadius(dp(14));
+        view.setBackground(box);
+        view.setPadding(dp(14), dp(12), dp(14), dp(12));
+        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(-1, -2);
+        params.topMargin = dp(4); params.bottomMargin = dp(8);
+        parent.addView(view, params);
+        return view;
+    }
+    /** Red inline note for a mistake inside a pane; hidden until there is something to say. */
+    private TextView errorLine(LinearLayout parent) {
+        TextView view = new TextView(this);
+        view.setTextSize(14); view.setTextColor(color(R.color.tone_attention));
+        view.setCompoundDrawablesRelativeWithIntrinsicBounds(R.drawable.ic_warning, 0, 0, 0);
+        view.setCompoundDrawablePadding(dp(10));
+        view.setCompoundDrawableTintList(ColorStateList.valueOf(color(R.color.tone_attention)));
+        view.setGravity(Gravity.CENTER_VERTICAL);
+        GradientDrawable box = new GradientDrawable();
+        box.setColor(color(R.color.problem_bg)); box.setCornerRadius(dp(14));
+        view.setBackground(box);
+        view.setPadding(dp(14), dp(10), dp(14), dp(10));
+        view.setAccessibilityLiveRegion(View.ACCESSIBILITY_LIVE_REGION_POLITE);
+        view.setVisibility(View.GONE);
+        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(-1, -2);
+        params.topMargin = dp(8);
+        parent.addView(view, params);
+        return view;
+    }
+    /** Raw backend text, folded away under "Technical details". */
+    private void details(LinearLayout parent, String raw) {
+        if (raw == null || raw.trim().isEmpty()) return;
+        MaterialButton toggle = new MaterialButton(this);
+        toggle.setText(R.string.technical_details); toggle.setAllCaps(false); toggle.setTextSize(14);
+        toggle.setGravity(Gravity.START | Gravity.CENTER_VERTICAL);
+        toggle.setBackgroundTintList(ColorStateList.valueOf(Color.TRANSPARENT));
+        toggle.setRippleColor(ColorStateList.valueOf(fade(color(R.color.muted), 0x22)));
+        toggle.setTextColor(color(R.color.muted));
+        toggle.setIconResource(R.drawable.ic_expand);
+        toggle.setIconTint(ColorStateList.valueOf(color(R.color.muted)));
+        toggle.setIconGravity(MaterialButton.ICON_GRAVITY_TEXT_START);
+        toggle.setElevation(0);
+        ViewCompat.setStateDescription(toggle, s(R.string.collapsed));
+        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(-1, -2);
+        params.topMargin = dp(8);
+        parent.addView(toggle, params);
+        TextView code = codeBox(parent, raw);
+        code.setVisibility(View.GONE);
+        toggle.setOnClickListener(v -> {
+            boolean open = code.getVisibility() != View.VISIBLE;
+            code.setVisibility(open ? View.VISIBLE : View.GONE);
+            toggle.setIconResource(open ? R.drawable.ic_collapse : R.drawable.ic_expand);
+            ViewCompat.setStateDescription(toggle, s(open ? R.string.expanded : R.string.collapsed));
+        });
+    }
+
+    /** Rounded sheet with a coloured header; long content scrolls inside the sheet only. */
+    private LinearLayout frame(BottomSheetDialog dialog, int icon, Look look, CharSequence title) {
+        LinearLayout body = new LinearLayout(this);
+        body.setOrientation(LinearLayout.VERTICAL);
+        body.setPadding(dp(20), dp(8), dp(20), dp(24));
+        LinearLayout header = new LinearLayout(this);
+        header.setOrientation(LinearLayout.HORIZONTAL);
+        header.setGravity(Gravity.CENTER_VERTICAL);
+        header.addView(iconBubble(icon, look.soft, look.strong, dp(44)));
+        TextView name = new TextView(this);
+        name.setText(title); name.setTextSize(22); name.setTextColor(color(R.color.ink));
+        name.setTypeface(Typeface.create("sans-serif-medium", Typeface.BOLD));
+        name.setPadding(dp(14), 0, 0, 0);
+        ViewCompat.setAccessibilityHeading(name, true);
+        header.addView(name, new LinearLayout.LayoutParams(0, -2, 1));
+        LinearLayout.LayoutParams headerParams = new LinearLayout.LayoutParams(-1, -2);
+        headerParams.bottomMargin = dp(16);
+        body.addView(header, headerParams);
+        NestedScrollView scroll = new NestedScrollView(this);
+        scroll.addView(body);
+        dialog.setContentView(scroll);
+        dialog.getBehavior().setState(BottomSheetBehavior.STATE_EXPANDED);
+        dialog.getBehavior().setSkipCollapsed(true);
+        return body;
+    }
+    /** A nested sheet opened from the main screen or another sheet: messages, editors, choices. */
+    private final class Pane {
+        final BottomSheetDialog dialog = new BottomSheetDialog(MainActivity.this);
+        final LinearLayout body;
+        Runnable after;
+        Pane(int icon, Look look, CharSequence title) {
+            body = frame(dialog, icon, look, title);
+            panes.add(dialog);
+            dialog.setOnDismissListener(d -> {
+                panes.remove(dialog);
+                if (after != null) after.run();
+            });
+        }
+        void show() { if (!isFinishing() && !isDestroyed()) dialog.show(); }
+        void close() { dialog.dismiss(); }
+    }
+    private void info(int icon, Look look, CharSequence title, CharSequence value) {
+        Pane pane = new Pane(icon, look, title);
+        para(pane.body, value);
+        primary(pane.body, look, s(R.string.close), pane::close);
+        pane.show();
+    }
+    private void done(String value) {
+        info(R.drawable.ic_check, Look.GREEN, s(R.string.done_title), value);
+    }
+    private void error(String raw) {
+        Pane pane = new Pane(R.drawable.ic_warning, Look.ROSE, s(R.string.error_title));
+        String shown = UiText.status(this, raw);
+        para(pane.body, shown.isEmpty() ? s(R.string.problem_unknown_what) : shown);
+        primary(pane.body, Look.ROSE, s(R.string.close), pane::close);
+        if (raw != null && !raw.equals(shown)) details(pane.body, raw);
+        pane.show();
     }
 
     @Override public void onCreate(Bundle state) {
@@ -193,7 +362,10 @@ public final class MainActivity extends AppCompatActivity {
         super.onSaveInstanceState(state);
     }
     @Override protected void onDestroy() {
-        if (pulse != null) { pulse.cancel(); pulse = null; }
+        if (tint != null) { tint.cancel(); tint = null; }
+        if (glow != null) glow.stop();
+        for (BottomSheetDialog pane : new ArrayList<>(panes)) { pane.setOnDismissListener(null); pane.dismiss(); }
+        panes.clear();
         if (sheet != null) { sheet.setOnDismissListener(null); sheet.dismiss(); sheet = null; }
         super.onDestroy();
     }
@@ -215,10 +387,14 @@ public final class MainActivity extends AppCompatActivity {
             }
         };
         stage.addView(power, new FrameLayout.LayoutParams(-1, -1, Gravity.CENTER));
-        halo = new View(this);
-        power.addView(halo, new FrameLayout.LayoutParams(-1, -1));
-        core = new View(this);
+        glow = new PowerGlow(this);
+        power.addView(glow, new FrameLayout.LayoutParams(-1, -1));
+        View core = new View(this);
         core.setElevation(dp(6));
+        fill = new GradientDrawable(GradientDrawable.Orientation.TL_BR, new int[]{Color.GRAY, Color.DKGRAY});
+        fill.setShape(GradientDrawable.OVAL);
+        core.setBackground(new InsetDrawable(fill, 0.1f));
+        core.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
         power.addView(core, new FrameLayout.LayoutParams(-1, -1));
         ImageView icon = new ImageView(this);
         icon.setImageDrawable(new InsetDrawable(ContextCompat.getDrawable(this, R.drawable.ic_power), 0.33f));
@@ -231,6 +407,7 @@ public final class MainActivity extends AppCompatActivity {
         power.setContentDescription(s(R.string.ssh_tunnel));
         power.setOnClickListener(v -> {
             v.performHapticFeedback(HapticFeedbackConstants.CONTEXT_CLICK);
+            bounce(v);
             setTunnel(!name.krot.adbsshtunnel.Settings.enabled(this));
         });
         ViewCompat.setAccessibilityDelegate(power, new AccessibilityDelegateCompat() {
@@ -247,22 +424,53 @@ public final class MainActivity extends AppCompatActivity {
         status = label(hero, "", 15, false, R.color.muted, 2);
         status.setGravity(Gravity.CENTER);
         status.setPadding(dp(8), dp(4), dp(8), dp(4));
-        status.setOnClickListener(v -> detail(R.string.status_details, UiText.status(this, SshdService.state)));
+        status.setOnClickListener(v -> showStatus());
+        problemChip = new MaterialButton(this);
+        problemChip.setAllCaps(false); problemChip.setTextSize(15);
+        problemChip.setMaxLines(2); problemChip.setEllipsize(TextUtils.TruncateAt.END);
+        problemChip.setCornerRadius(dp(24)); problemChip.setMinHeight(dp(48));
+        problemChip.setBackgroundTintList(ColorStateList.valueOf(color(R.color.problem_bg)));
+        problemChip.setTextColor(color(R.color.tone_attention));
+        problemChip.setRippleColor(ColorStateList.valueOf(fade(color(R.color.tone_attention), 0x33)));
+        problemChip.setIconResource(R.drawable.ic_warning);
+        problemChip.setIconTint(ColorStateList.valueOf(color(R.color.tone_attention)));
+        problemChip.setIconSize(dp(20));
+        problemChip.setAccessibilityLiveRegion(View.ACCESSIBILITY_LIVE_REGION_POLITE);
+        problemChip.setVisibility(View.GONE);
+        problemChip.setOnClickListener(v -> showProblem());
+        LinearLayout.LayoutParams chipParams = new LinearLayout.LayoutParams(-2, -2);
+        chipParams.gravity = Gravity.CENTER_HORIZONTAL;
+        chipParams.topMargin = dp(2);
+        hero.addView(problemChip, chipParams);
         hint = label(hero, "", 13, false, R.color.muted, 2);
         hint.setGravity(Gravity.CENTER);
         ((LinearLayout.LayoutParams) hint.getLayoutParams()).bottomMargin = dp(compact ? 8 : 16);
     }
+    /** Short press-in and spring back; skipped when system animations are off. */
+    private void bounce(View view) {
+        if (!ValueAnimator.areAnimatorsEnabled()) return;
+        view.animate().cancel();
+        view.animate().scaleX(0.94f).scaleY(0.94f).setDuration(90).setInterpolator(new DecelerateInterpolator())
+            .withEndAction(() -> view.animate().scaleX(1f).scaleY(1f).setDuration(220)
+                .setInterpolator(new OvershootInterpolator(3f)).start())
+            .start();
+    }
     private void setTunnel(boolean checked) {
         if (checked != name.krot.adbsshtunnel.Settings.enabled(this)) {
             try {
-                if (!SshdService.select(this, checked)) message(UiText.status(this, SshdService.state));
-            } catch (Exception e) { message(e.getMessage()); }
+                if (!SshdService.select(this, checked)) showProblem();
+            } catch (Exception e) { error(e.getMessage()); }
         }
         refresh();
     }
-    private void paintPower(UiText.Tone tone) {
-        if (power == null || tone == shownTone) return;
-        shownTone = tone;
+    /** Starts the tunnel again with the current settings; used by "Try again". */
+    private void retry() {
+        try {
+            if (!SshdService.select(this, true)) showProblem();
+        } catch (Exception e) { error(e.getMessage()); }
+        refresh();
+    }
+    private int[] toneColors(UiText.Tone tone) {
         int start, end, text;
         switch (tone) {
             case READY: start = R.color.power_ready_start; end = R.color.power_ready_end; text = R.color.tone_ready; break;
@@ -270,27 +478,129 @@ public final class MainActivity extends AppCompatActivity {
             case ATTENTION: start = R.color.power_attention_start; end = R.color.power_attention_end; text = R.color.tone_attention; break;
             default: start = R.color.power_off_start; end = R.color.power_off_end; text = R.color.tone_off;
         }
-        GradientDrawable fill = new GradientDrawable(GradientDrawable.Orientation.TL_BR,
-            new int[]{color(start), color(end)});
-        fill.setShape(GradientDrawable.OVAL);
-        core.setBackground(new InsetDrawable(fill, 0.1f));
-        GradientDrawable ring = new GradientDrawable();
-        ring.setShape(GradientDrawable.OVAL);
-        ring.setColor((color(end) & 0x00FFFFFF) | 0x33000000);
-        halo.setBackground(ring);
-        headline.setTextColor(color(text));
-        if (pulse != null) { pulse.cancel(); pulse = null; }
-        halo.setScaleX(1f); halo.setScaleY(1f); halo.setAlpha(1f);
-        if (tone == UiText.Tone.READY || tone == UiText.Tone.WORKING) {
-            pulse = ObjectAnimator.ofPropertyValuesHolder(halo,
-                PropertyValuesHolder.ofFloat(View.SCALE_X, 0.9f, 1f),
-                PropertyValuesHolder.ofFloat(View.SCALE_Y, 0.9f, 1f),
-                PropertyValuesHolder.ofFloat(View.ALPHA, 1f, 0.35f));
-            pulse.setDuration(tone == UiText.Tone.READY ? 1600 : 700);
-            pulse.setRepeatMode(ValueAnimator.REVERSE);
-            pulse.setRepeatCount(ValueAnimator.INFINITE);
-            pulse.start();
+        return new int[]{color(start), color(end), color(text)};
+    }
+    private void paintPower(UiText.Tone tone) {
+        if (power == null || tone == shownTone) return;
+        boolean animate = shownTone != null && shownColors != null && ValueAnimator.areAnimatorsEnabled();
+        shownTone = tone;
+        int[] target = toneColors(tone);
+        glow.show(tone, animate);
+        if (tint != null) { tint.cancel(); tint = null; }
+        if (!animate) { applyTint(target); return; }
+        int[] from = shownColors.clone();
+        ArgbEvaluator evaluator = new ArgbEvaluator();
+        tint = ValueAnimator.ofFloat(0f, 1f);
+        tint.setDuration(450);
+        tint.addUpdateListener(animation -> {
+            float fraction = animation.getAnimatedFraction();
+            int[] now = new int[from.length];
+            for (int i = 0; i < now.length; i++) now[i] = (int) evaluator.evaluate(fraction, from[i], target[i]);
+            applyTint(now);
+        });
+        tint.start();
+    }
+    private void applyTint(int[] colors) {
+        shownColors = colors;
+        fill.setColors(new int[]{colors[0], colors[1]});
+        headline.setTextColor(colors[2]);
+        glow.setColors(colors[0], colors[1]);
+    }
+
+    /** The problem the main screen shows for the current tunnel state, if any. */
+    private UiText.Problem currentProblem(boolean enabled, String state) {
+        UiText.Problem problem = UiText.visibleProblem(enabled, state);
+        // A rejected key stays in the last state until the next start; once the saved keys are fixed it is resolved.
+        if (!enabled && problem == UiText.Problem.KEYS && keysValid()) return UiText.Problem.NONE;
+        return problem;
+    }
+    private boolean keysValid() {
+        try { KeyPolicy.parse(name.krot.adbsshtunnel.Settings.keys(this)); return true; }
+        catch (IOException | RuntimeException e) { return false; }
+    }
+    private void showProblemChip(UiText.Problem problem) {
+        if (problemChip == null || problem == shownProblem) return;
+        shownProblem = problem;
+        boolean visible = problem != UiText.Problem.NONE;
+        if (visible) {
+            problemChip.setText(problem.title);
+            if (problemChip.getVisibility() != View.VISIBLE && ValueAnimator.areAnimatorsEnabled()) {
+                problemChip.setAlpha(0f);
+                problemChip.animate().alpha(1f).setDuration(250).start();
+            }
         }
+        problemChip.setVisibility(visible ? View.VISIBLE : View.GONE);
+        status.setVisibility(visible ? View.GONE : View.VISIBLE);
+    }
+    private void showStatus() {
+        String state = SshdService.state;
+        if (currentProblem(name.krot.adbsshtunnel.Settings.enabled(this), state) != UiText.Problem.NONE) {
+            showProblem();
+            return;
+        }
+        info(R.drawable.ic_info, Look.BLUE, s(R.string.status_details), UiText.status(this, state));
+    }
+    /** What happened, what to do and a button that opens the right place. */
+    private void showProblem() {
+        String raw = SshdService.state;
+        UiText.Problem problem = currentProblem(name.krot.adbsshtunnel.Settings.enabled(this), raw);
+        if (problem == UiText.Problem.NONE) {
+            info(R.drawable.ic_info, Look.BLUE, s(R.string.status_details), UiText.status(this, raw));
+            return;
+        }
+        Pane pane = problemPane(problem);
+        MaterialButton main = primary(pane.body, Look.ROSE, s(fixLabel(problem.fix)), () -> {
+            pane.close();
+            fix(problem.fix);
+        });
+        if (problem.fix == UiText.Fix.RETRY) main.setIconResource(R.drawable.ic_refresh);
+        if (problem.retry && problem.fix != UiText.Fix.RETRY)
+            secondary(pane.body, Look.ROSE, s(R.string.try_again), () -> { pane.close(); retry(); })
+                .setIconResource(R.drawable.ic_refresh);
+        else secondary(pane.body, Look.ROSE, s(R.string.close), pane::close);
+        details(pane.body, raw);
+        pane.show();
+    }
+    private Pane problemPane(UiText.Problem problem) {
+        Pane pane = new Pane(problem.icon, Look.ROSE, s(problem.title));
+        section(pane.body, R.string.what_happened, Look.ROSE);
+        para(pane.body, s(problem.what));
+        section(pane.body, R.string.what_to_do, Look.ROSE);
+        para(pane.body, s(problem.todo));
+        return pane;
+    }
+    private int fixLabel(UiText.Fix fix) {
+        switch (fix) {
+            case KEYS: return R.string.open_keys;
+            case PERMISSIONS: return R.string.open_permissions;
+            case INTERNET: return R.string.internet_settings;
+            case ACCESS: return R.string.open_access;
+            case DEVELOPER: return R.string.open_developer;
+            case ADB: return R.string.open_adb;
+            default: return R.string.try_again;
+        }
+    }
+    private void fix(UiText.Fix fix) {
+        switch (fix) {
+            case KEYS: editKeys(); break;
+            case PERMISSIONS: permissions(); break;
+            case INTERNET: internetSettings(); break;
+            case ACCESS: showSheet(SHEET_ACCESS); break;
+            case DEVELOPER: developerOptions(); break;
+            case ADB: showSheet(SHEET_ADB); break;
+            default: retry();
+        }
+    }
+    private void internetSettings() {
+        for (String action : new String[]{Settings.Panel.ACTION_INTERNET_CONNECTIVITY,
+            Settings.ACTION_WIRELESS_SETTINGS, Settings.ACTION_SETTINGS}) {
+            try { startActivity(new Intent(action)); return; }
+            catch (ActivityNotFoundException ignored) { }
+        }
+    }
+    private void developerOptions() {
+        try { startActivity(new Intent(Settings.ACTION_APPLICATION_DEVELOPMENT_SETTINGS)); }
+        catch (ActivityNotFoundException e) { startActivity(new Intent(Settings.ACTION_SETTINGS)); }
     }
 
     /** Four big colourful tiles: every former section is one tap away. */
@@ -328,32 +638,12 @@ public final class MainActivity extends AppCompatActivity {
         return label(inner, "", 13, false, R.color.muted, 1);
     }
 
-    /** Bottom sheet with a friendly header; long content scrolls inside the sheet only. */
-    private LinearLayout sheetBody(String id, int icon, int tint, int background, int title) {
+    /** One of the four main bottom sheets; it is restored after rotation. */
+    private LinearLayout sheetBody(String id, int icon, Look look, int title) {
         if (sheet != null) { sheet.setOnDismissListener(null); sheet.dismiss(); }
         clearSheetViews();
         BottomSheetDialog dialog = new BottomSheetDialog(this);
-        LinearLayout body = new LinearLayout(this);
-        body.setOrientation(LinearLayout.VERTICAL);
-        body.setPadding(dp(20), dp(8), dp(20), dp(24));
-        LinearLayout header = new LinearLayout(this);
-        header.setOrientation(LinearLayout.HORIZONTAL);
-        header.setGravity(Gravity.CENTER_VERTICAL);
-        header.addView(iconBubble(icon, background, tint, dp(44)));
-        TextView name = new TextView(this);
-        name.setText(title); name.setTextSize(22); name.setTextColor(color(R.color.ink));
-        name.setTypeface(Typeface.create("sans-serif-medium", Typeface.BOLD));
-        name.setPadding(dp(14), 0, 0, 0);
-        ViewCompat.setAccessibilityHeading(name, true);
-        header.addView(name, new LinearLayout.LayoutParams(0, -2, 1));
-        LinearLayout.LayoutParams headerParams = new LinearLayout.LayoutParams(-1, -2);
-        headerParams.bottomMargin = dp(16);
-        body.addView(header, headerParams);
-        NestedScrollView scroll = new NestedScrollView(this);
-        scroll.addView(body);
-        dialog.setContentView(scroll);
-        dialog.getBehavior().setState(BottomSheetBehavior.STATE_EXPANDED);
-        dialog.getBehavior().setSkipCollapsed(true);
+        LinearLayout body = frame(dialog, icon, look, s(title));
         dialog.setOnDismissListener(d -> {
             if (sheet != dialog) return;
             sheet = null; openSheet = null; clearSheetViews();
@@ -377,8 +667,7 @@ public final class MainActivity extends AppCompatActivity {
         if (sheet != null) sheet.show();
     }
     private void connectSheet() {
-        LinearLayout body = sheetBody(SHEET_CONNECT, R.drawable.ic_link, R.color.tile_blue,
-            R.color.tile_blue_bg, R.string.connection_details);
+        LinearLayout body = sheetBody(SHEET_CONNECT, R.drawable.ic_link, Look.BLUE, R.string.connection_details);
         label(body, s(R.string.connect_step_title), 15, true, R.color.ink, 2);
         TextView command = text(body, s(R.string.connect_command), 14);
         command.setTypeface(Typeface.MONOSPACE); command.setTextIsSelectable(true);
@@ -392,12 +681,12 @@ public final class MainActivity extends AppCompatActivity {
         label(body, s(R.string.network_now), 15, true, R.color.ink, 2);
         networkNow = text(body, "", 14);
         networkNow.setTextIsSelectable(true);
-        text(body, hostKey(), 13).setTextIsSelectable(true);
+        label(body, s(R.string.host_key), 15, true, R.color.ink, 2);
+        codeBox(body, hostKey());
         action(body, R.string.address_check, this::checkAddress);
     }
     private void accessSettings() {
-        LinearLayout access = sheetBody(SHEET_ACCESS, R.drawable.ic_network, R.color.tile_green,
-            R.color.tile_green_bg, R.string.access_settings);
+        LinearLayout access = sheetBody(SHEET_ACCESS, R.drawable.ic_network, Look.GREEN, R.string.access_settings);
         action(access, R.string.wifi_networks, () -> editNetwork(NetworkSettings.Kind.WIFI));
         wifiSummary = text(access, "", 14);
         action(access, R.string.mobile_operators, () -> editNetwork(NetworkSettings.Kind.MOBILE));
@@ -422,8 +711,7 @@ public final class MainActivity extends AppCompatActivity {
         return choice;
     }
     private void adbSettings() {
-        LinearLayout adb = sheetBody(SHEET_ADB, R.drawable.ic_adb, R.color.tile_violet,
-            R.color.tile_violet_bg, R.string.adb_mode);
+        LinearLayout adb = sheetBody(SHEET_ADB, R.drawable.ic_adb, Look.VIOLET, R.string.adb_mode);
         MaterialButtonToggleGroup mode = new MaterialButtonToggleGroup(this);
         mode.setOrientation(LinearLayout.VERTICAL);
         mode.setSingleSelection(true); mode.setSelectionRequired(true);
@@ -471,7 +759,7 @@ public final class MainActivity extends AppCompatActivity {
         action(root, R.string.root_helper, () -> configureRoot(RootSettings.read(this)));
         action(root, R.string.direct_adb_rules, this::editDirectAdb);
         action(root, R.string.root_status, this::showRootStatus);
-        action(root, R.string.adb_help, () -> detail(R.string.root_adb, s(R.string.root_help)));
+        action(root, R.string.adb_help, () -> info(R.drawable.ic_shield, Look.VIOLET, s(R.string.root_adb), s(R.string.root_help)));
         text(wireless, s(R.string.wireless_short), 15);
         if (BuildConfig.WIRELESS_HOLD_SUPPORTED) {
             SwitchMaterial hold = new SwitchMaterial(this);
@@ -481,7 +769,7 @@ public final class MainActivity extends AppCompatActivity {
             hold.setOnCheckedChangeListener((v, selected) -> {
                 if (selected && !WirelessDebuggingHold.permitted(this)) {
                     hold.setChecked(false);
-                    detail(R.string.wireless_hold, s(R.string.wireless_hold_setup));
+                    info(R.drawable.ic_adb, Look.VIOLET, s(R.string.wireless_hold), s(R.string.wireless_hold_setup));
                     return;
                 }
                 android.content.SharedPreferences.Editor edit = name.krot.adbsshtunnel.Settings.prefs(this)
@@ -493,11 +781,8 @@ public final class MainActivity extends AppCompatActivity {
             });
         }
         wirelessHoldStatus = text(wireless, s(WirelessDebuggingHold.status(this)), 14);
-        action(wireless, R.string.developer_options, () -> {
-            try { startActivity(new Intent(Settings.ACTION_APPLICATION_DEVELOPMENT_SETTINGS)); }
-            catch (ActivityNotFoundException e) { startActivity(new Intent(Settings.ACTION_SETTINGS)); }
-        });
-        action(wireless, R.string.adb_help, () -> detail(R.string.wireless_title,
+        action(wireless, R.string.developer_options, this::developerOptions);
+        action(wireless, R.string.adb_help, () -> info(R.drawable.ic_adb, Look.VIOLET, s(R.string.wireless_title),
             BuildConfig.WIRELESS_HOLD_SUPPORTED
                 ? s(R.string.wireless_help) + "\n\n" + s(R.string.wireless_hold_setup)
                 : s(R.string.wireless_manual_help)));
@@ -518,7 +803,7 @@ public final class MainActivity extends AppCompatActivity {
                 result = e.getMessage(); success = false;
                 name.krot.adbsshtunnel.Settings.prefs(this).edit().putString("root_controller_error", result).apply();
             }
-            final String value = UiText.rootError(this, result); final boolean configured = success;
+            final String raw = result, value = UiText.rootError(this, result); final boolean configured = success;
             runOnUiThread(() -> {
                 rootRequest = false;
                 if (isFinishing() || isDestroyed()) return;
@@ -531,58 +816,94 @@ public final class MainActivity extends AppCompatActivity {
                     persistentUsb.setEnabled(true);
                 }
                 if (rootStatus != null) rootStatus.setText(configured ? s(R.string.root_guard_verified) : value);
-                detail(R.string.root_status, value);
+                if (configured) info(R.drawable.ic_shield, Look.GREEN, s(R.string.root_status), value);
+                else rootProblem(raw, policy);
             });
         }, "root-controller").start();
     }
+    /** A failed root set-up: explained in plain words, with the exact error under details. */
+    private void rootProblem(String raw, RootPolicy policy) {
+        boolean missing = UiText.isSuMissing(raw);
+        Pane pane = problemPane(missing ? UiText.Problem.ROOT_MISSING : UiText.Problem.ROOT_FAILED);
+        if (missing) primary(pane.body, Look.ROSE, s(R.string.close), pane::close);
+        else {
+            primary(pane.body, Look.ROSE, s(R.string.try_again), () -> { pane.close(); configureRoot(policy); })
+                .setIconResource(R.drawable.ic_refresh);
+            secondary(pane.body, Look.ROSE, s(R.string.close), pane::close);
+        }
+        details(pane.body, raw);
+        pane.show();
+    }
     private void showRootStatus() {
-        if (!RootSettings.configured(this)) { detail(R.string.root_status, s(R.string.root_unconfigured)); return; }
+        if (!RootSettings.configured(this)) {
+            info(R.drawable.ic_shield, Look.VIOLET, s(R.string.root_status), s(R.string.root_unconfigured));
+            return;
+        }
         new Thread(() -> {
             String result;
             try { result = RootHelper.status(); }
             catch (Exception e) { result = e.getMessage(); }
             final String value = UiText.rootError(this, result);
-            runOnUiThread(() -> { if (!isFinishing() && !isDestroyed()) detail(R.string.root_status, value); });
+            runOnUiThread(() -> {
+                if (!isFinishing() && !isDestroyed())
+                    info(R.drawable.ic_shield, Look.VIOLET, s(R.string.root_status), value);
+            });
         }, "root-status").start();
     }
+    private TextInputLayout field(LinearLayout body, int hint) {
+        TextInputLayout layout = new TextInputLayout(this);
+        layout.setHint(s(hint));
+        layout.setBoxBackgroundMode(TextInputLayout.BOX_BACKGROUND_OUTLINE);
+        float radius = dp(14);
+        layout.setBoxCornerRadii(radius, radius, radius, radius);
+        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(-1, -2);
+        params.topMargin = dp(8);
+        body.addView(layout, params);
+        return layout;
+    }
     private TextInputEditText rootField(LinearLayout body, int hint, String value) {
-        TextInputLayout layout = new TextInputLayout(this); layout.setHint(s(hint));
+        TextInputLayout layout = field(body, hint);
         TextInputEditText input = new TextInputEditText(layout.getContext());
-        input.setSingleLine(true); input.setText(value); layout.addView(input); body.addView(layout);
+        input.setSingleLine(true); input.setText(value); layout.addView(input);
         return input;
     }
     private void editDirectAdb() {
         RootPolicy policy = RootSettings.read(this);
-        LinearLayout body = new LinearLayout(this); body.setOrientation(LinearLayout.VERTICAL);
-        body.setPadding(dp(20), dp(8), dp(20), 0);
-        text(body, s(R.string.direct_adb_help), 14);
-        TextInputEditText wifi = rootField(body, R.string.adb_wifi_prefix, policy.wifiPrefix);
-        TextInputEditText hotspot = rootField(body, R.string.adb_hotspot_ssid, policy.hotspotSsid);
-        TextInputEditText wireguard = rootField(body, R.string.adb_wireguard_iface, policy.wireguardInterface);
-        ScrollView scroll = new ScrollView(this); scroll.addView(body);
-        androidx.appcompat.app.AlertDialog dialog = new androidx.appcompat.app.AlertDialog.Builder(this)
-            .setTitle(R.string.direct_adb_rules).setView(scroll).setNegativeButton(R.string.cancel, null)
-            .setPositiveButton(R.string.save, null).create();
-        dialog.setOnShowListener(ignored -> dialog.getButton(android.content.DialogInterface.BUTTON_POSITIVE).setOnClickListener(v -> {
+        Pane pane = new Pane(R.drawable.ic_adb, Look.VIOLET, s(R.string.direct_adb_rules));
+        para(pane.body, s(R.string.direct_adb_help));
+        TextInputEditText wifi = rootField(pane.body, R.string.adb_wifi_prefix, policy.wifiPrefix);
+        TextInputEditText hotspot = rootField(pane.body, R.string.adb_hotspot_ssid, policy.hotspotSsid);
+        TextInputEditText wireguard = rootField(pane.body, R.string.adb_wireguard_iface, policy.wireguardInterface);
+        TextView problem = errorLine(pane.body);
+        primary(pane.body, Look.VIOLET, s(R.string.save), () -> {
             try {
                 RootPolicy updated = new RootPolicy(policy.enabled, String.valueOf(wifi.getText()),
                     String.valueOf(hotspot.getText()), String.valueOf(wireguard.getText()), policy.usbEnabled);
                 if (rootRequest) return;
-                dialog.dismiss(); configureRoot(updated);
-            } catch (IllegalArgumentException e) { message(e.getMessage()); }
-        }));
-        dialog.show();
+                pane.close(); configureRoot(updated);
+            } catch (IllegalArgumentException e) {
+                problem.setText(UiText.status(this, e.getMessage()));
+                problem.setVisibility(View.VISIBLE);
+            }
+        });
+        secondary(pane.body, Look.VIOLET, s(R.string.cancel), pane::close);
+        pane.show();
     }
     private void advancedSettings() {
-        LinearLayout preferences = sheetBody(SHEET_MORE, R.drawable.ic_settings, R.color.tile_orange,
-            R.color.tile_orange_bg, R.string.advanced_settings);
+        LinearLayout preferences = sheetBody(SHEET_MORE, R.drawable.ic_settings, Look.ORANGE, R.string.advanced_settings);
         action(preferences, R.string.language, this::language);
         text(preferences, languageName(), 15);
         action(preferences, R.string.quick_settings, this::addTile);
-        action(preferences, R.string.host_key, () -> detail(R.string.host_key, hostKey()));
-        action(preferences, R.string.status_details, () -> detail(R.string.status_details, UiText.status(this, SshdService.state)));
-        action(preferences, R.string.about_title, () -> detail(R.string.about_title,
+        action(preferences, R.string.host_key, this::showHostKey);
+        action(preferences, R.string.status_details, this::showStatus);
+        action(preferences, R.string.about_title, () -> info(R.drawable.ic_tunnel, Look.ORANGE, s(R.string.about_title),
             getString(R.string.about_version, versionName()) + "\n\n" + s(R.string.about)));
+    }
+    private void showHostKey() {
+        Pane pane = new Pane(R.drawable.ic_lock, Look.ORANGE, s(R.string.host_key));
+        codeBox(pane.body, hostKey());
+        primary(pane.body, Look.ORANGE, s(R.string.close), pane::close);
+        pane.show();
     }
     private String languageName() {
         String selected = AppCompatDelegate.getApplicationLocales().toLanguageTags();
@@ -596,94 +917,129 @@ public final class MainActivity extends AppCompatActivity {
         String tags = AppCompatDelegate.getApplicationLocales().toLanguageTags();
         int selected = tags.isEmpty() ? 0 : ("ru".equals(tags) ? 1 : 2);
         String[] labels = {s(R.string.system_language), "Русский", "English"};
-        new androidx.appcompat.app.AlertDialog.Builder(this).setTitle(R.string.language)
-            .setSingleChoiceItems(labels, selected, (dialog, choice) -> {
-                dialog.dismiss();
+        Pane pane = new Pane(R.drawable.ic_language, Look.ORANGE, s(R.string.language));
+        for (int i = 0; i < labels.length; i++) {
+            int choice = i;
+            boolean checked = i == selected;
+            MaterialButton row = action(pane.body, labels[i], () -> {
+                pane.close();
                 AppCompatDelegate.setApplicationLocales(LocaleListCompat.forLanguageTags(
                     choice == 0 ? "" : choice == 1 ? "ru" : "en"));
-            }).setNegativeButton(R.string.cancel, null).show();
+            });
+            if (checked) {
+                row.setBackgroundTintList(ColorStateList.valueOf(color(Look.ORANGE.soft)));
+                row.setIconResource(R.drawable.ic_check);
+                row.setIconTint(ColorStateList.valueOf(color(Look.ORANGE.strong)));
+                row.setIconGravity(MaterialButton.ICON_GRAVITY_END);
+            }
+            ViewCompat.setAccessibilityDelegate(row, new AccessibilityDelegateCompat() {
+                @Override public void onInitializeAccessibilityNodeInfo(View host, AccessibilityNodeInfoCompat info) {
+                    super.onInitializeAccessibilityNodeInfo(host, info);
+                    info.setClassName(RadioButton.class.getName());
+                    info.setCheckable(true);
+                    info.setChecked(checked);
+                }
+            });
+        }
+        secondary(pane.body, Look.ORANGE, s(R.string.cancel), pane::close);
+        pane.show();
     }
     private void editKeys() {
-        TextInputLayout input = new TextInputLayout(this); input.setHint(s(R.string.key_hint));
+        Pane pane = new Pane(R.drawable.ic_key, Look.GREEN, s(R.string.trusted_keys));
+        para(pane.body, s(R.string.key_warning));
+        TextInputLayout input = field(pane.body, R.string.key_hint);
         TextInputEditText keys = new TextInputEditText(input.getContext());
         keys.setMinLines(3); keys.setMaxLines(8);
         keys.setInputType(android.text.InputType.TYPE_CLASS_TEXT | android.text.InputType.TYPE_TEXT_FLAG_MULTI_LINE
             | android.text.InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS);
         keys.setText(name.krot.adbsshtunnel.Settings.keys(this));
         input.addView(keys);
-        LinearLayout body = new LinearLayout(this); body.setOrientation(LinearLayout.VERTICAL);
-        body.setPadding(dp(20), dp(8), dp(20), 0);
-        text(body, s(R.string.key_warning), 15); body.addView(input);
-        androidx.appcompat.app.AlertDialog dialog = new androidx.appcompat.app.AlertDialog.Builder(this)
-            .setTitle(R.string.trusted_keys).setView(body)
-            .setPositiveButton(R.string.save, null).setNegativeButton(R.string.cancel, null).create();
-        dialog.setOnShowListener(v -> dialog.getButton(androidx.appcompat.app.AlertDialog.BUTTON_POSITIVE).setOnClickListener(b -> {
+        keys.addTextChangedListener(new TextWatcher() {
+            @Override public void beforeTextChanged(CharSequence s, int start, int count, int after) { }
+            @Override public void onTextChanged(CharSequence s, int start, int before, int count) { }
+            @Override public void afterTextChanged(Editable s) { input.setError(null); }
+        });
+        primary(pane.body, Look.GREEN, s(R.string.save), () -> {
             try {
                 name.krot.adbsshtunnel.Settings.saveKeys(this, Objects.requireNonNull(keys.getText()).toString());
                 if (name.krot.adbsshtunnel.Settings.enabled(this)) SshdService.select(this, true);
-                dialog.dismiss(); refresh(); message(s(R.string.keys_saved));
-            } catch (IOException e) { message(e.getMessage()); }
-        }));
-        dialog.show();
+                pane.close(); refresh(); done(s(R.string.keys_saved));
+            } catch (IOException e) { input.setError(UiText.status(this, e.getMessage())); }
+        });
+        secondary(pane.body, Look.GREEN, s(R.string.cancel), pane::close);
+        pane.show();
     }
     private void editNetwork(NetworkSettings.Kind kind) {
-        ScrollView scroll = new ScrollView(this);
+        Pane pane = new Pane(R.drawable.ic_network, Look.GREEN,
+            s(kind == NetworkSettings.Kind.WIFI ? R.string.wifi_networks : R.string.mobile_operators));
         NetworkPolicyView view = new NetworkPolicyView(this, kind, this::rulesChanged);
-        view.setPadding(dp(16), dp(8), dp(16), dp(8));
-        editor = view; view.showNetworks(networks); scroll.addView(view);
-        androidx.appcompat.app.AlertDialog dialog = new androidx.appcompat.app.AlertDialog.Builder(this)
-            .setTitle(kind == NetworkSettings.Kind.WIFI ? R.string.wifi_networks : R.string.mobile_operators)
-            .setView(scroll).setPositiveButton(R.string.close, null).create();
-        dialog.setOnDismissListener(d -> { if (editor == view) editor = null; });
-        dialog.show();
+        editor = view; view.showNetworks(networks);
+        pane.body.addView(view, new LinearLayout.LayoutParams(-1, -2));
+        secondary(pane.body, Look.GREEN, s(R.string.close), pane::close);
+        pane.after = () -> { if (editor == view) editor = null; };
+        pane.show();
     }
     private void permissions() {
-        LinearLayout body = new LinearLayout(this); body.setOrientation(LinearLayout.VERTICAL);
-        body.setPadding(dp(20), dp(8), dp(20), dp(8));
-        text(body, s(R.string.network_help) + "\n\n" + s(R.string.permissions_help), 15);
-        button(body, R.string.grant_identity, () -> requestPermissions(new String[]{
+        Pane pane = new Pane(R.drawable.ic_lock, Look.GREEN, s(R.string.permissions));
+        para(pane.body, s(R.string.network_help));
+        para(pane.body, s(R.string.permissions_help));
+        primary(pane.body, Look.GREEN, s(R.string.grant_identity), () -> requestPermissions(new String[]{
             Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION,
             Manifest.permission.READ_PHONE_STATE}, 2));
-        button(body, R.string.background_identity, () -> startActivity(new Intent(
+        LinearLayout.LayoutParams gap = new LinearLayout.LayoutParams(-1, dp(8));
+        pane.body.addView(new Space(this), gap);
+        action(pane.body, R.string.background_identity, () -> startActivity(new Intent(
             Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:" + getPackageName()))));
-        button(body, R.string.location_settings, () -> startActivity(new Intent(Settings.ACTION_LOCATION_SOURCE_SETTINGS)));
-        ScrollView scroll = new ScrollView(this); scroll.addView(body);
-        new androidx.appcompat.app.AlertDialog.Builder(this).setTitle(R.string.permissions)
-            .setView(scroll).setPositiveButton(R.string.close, null).show();
+        action(pane.body, R.string.location_settings, () -> startActivity(new Intent(Settings.ACTION_LOCATION_SOURCE_SETTINGS)));
+        secondary(pane.body, Look.GREEN, s(R.string.close), pane::close);
+        pane.show();
     }
     private void addTile() {
         if (Build.VERSION.SDK_INT >= 33) getSystemService(StatusBarManager.class).requestAddTileService(
             new ComponentName(this, TunnelTile.class), s(R.string.app_name),
             Icon.createWithResource(this, R.drawable.ic_tunnel), getMainExecutor(), result -> {
-                if (!isFinishing() && !isDestroyed()) message(s(
-                    result == StatusBarManager.TILE_ADD_REQUEST_RESULT_TILE_ADDED
-                    || result == StatusBarManager.TILE_ADD_REQUEST_RESULT_TILE_ALREADY_ADDED ? R.string.tile_added : R.string.tile_not_added));
+                if (isFinishing() || isDestroyed()) return;
+                if (result == StatusBarManager.TILE_ADD_REQUEST_RESULT_TILE_ADDED
+                    || result == StatusBarManager.TILE_ADD_REQUEST_RESULT_TILE_ALREADY_ADDED) done(s(R.string.tile_added));
+                else info(R.drawable.ic_tile, Look.ORANGE, s(R.string.quick_settings), s(R.string.tile_not_added));
             });
-        else message(s(R.string.tile_manual));
+        else info(R.drawable.ic_tile, Look.ORANGE, s(R.string.quick_settings), s(R.string.tile_manual));
     }
     private void checkAddress() {
-        new androidx.appcompat.app.AlertDialog.Builder(this).setTitle(R.string.address_check)
-            .setMessage(R.string.address_help).setNegativeButton(R.string.cancel, null)
-            .setPositiveButton(R.string.check_now, (d, v) -> {
-                if (checkingAddress) return;
-                checkingAddress = true;
-                if (networkMonitor != null) networkMonitor.refresh();
-                TextView result = new TextView(this); result.setText(R.string.checking);
-                result.setPadding(dp(20), dp(12), dp(20), dp(12)); result.setTextIsSelectable(true);
-                ScrollView scroll = new ScrollView(this); scroll.addView(result);
-                new androidx.appcompat.app.AlertDialog.Builder(this).setTitle(R.string.address_check).setView(scroll)
-                    .setPositiveButton(R.string.close, null).show();
-                new Thread(() -> {
-                    String value;
-                    try { value = UiText.diagnostics(this, NetworkDiagnostics.inspect(this)); }
-                    catch (Exception e) { value = getString(R.string.check_failed, e.getMessage()); }
-                    final String message = value;
-                    runOnUiThread(() -> {
-                        checkingAddress = false;
-                        if (!isFinishing() && !isDestroyed()) result.setText(message);
-                    });
-                }, "network-diagnostics").start();
-            }).show();
+        Pane pane = new Pane(R.drawable.ic_network, Look.BLUE, s(R.string.address_check));
+        TextView note = para(pane.body, s(R.string.address_help));
+        LinearLayout actions = new LinearLayout(this);
+        actions.setOrientation(LinearLayout.VERTICAL);
+        pane.body.addView(actions, new LinearLayout.LayoutParams(-1, -2));
+        primary(actions, Look.BLUE, s(R.string.check_now), () -> {
+            if (checkingAddress) return;
+            checkingAddress = true;
+            if (networkMonitor != null) networkMonitor.refresh();
+            actions.removeAllViews();
+            note.setText(R.string.checking_address);
+            LinearProgressIndicator progress = new LinearProgressIndicator(this);
+            progress.setIndeterminate(true);
+            progress.setIndicatorColor(color(Look.BLUE.strong));
+            progress.setTrackColor(color(Look.BLUE.soft));
+            progress.setTrackCornerRadius(dp(4));
+            actions.addView(progress, new LinearLayout.LayoutParams(-1, -2));
+            new Thread(() -> {
+                String value;
+                try { value = UiText.diagnostics(this, NetworkDiagnostics.inspect(this)); }
+                catch (Exception e) { value = getString(R.string.check_failed, e.getMessage()); }
+                final String message = value;
+                runOnUiThread(() -> {
+                    checkingAddress = false;
+                    if (isFinishing() || isDestroyed()) return;
+                    actions.removeAllViews();
+                    note.setVisibility(View.GONE);
+                    codeBox(actions, message);
+                    primary(actions, Look.BLUE, s(R.string.close), pane::close);
+                });
+            }, "network-diagnostics").start();
+        });
+        secondary(actions, Look.BLUE, s(R.string.cancel), pane::close);
+        pane.show();
     }
     private void rulesChanged() {
         if (name.krot.adbsshtunnel.Settings.enabled(this)) SshdService.select(this, true);
@@ -727,18 +1083,22 @@ public final class MainActivity extends AppCompatActivity {
     }
     private void refresh() {
         boolean enabled = name.krot.adbsshtunnel.Settings.enabled(this);
-        UiText.Tone tone = UiText.tone(enabled, SshdService.state);
+        String state = SshdService.state;
+        UiText.Problem problem = currentProblem(enabled, state);
+        UiText.Tone tone = problem != UiText.Problem.NONE ? UiText.Tone.ATTENTION : UiText.tone(enabled, state);
         long keys = keyCount();
         if (headline != null) {
             int title, tip;
             switch (tone) {
                 case READY: title = R.string.power_on_title; tip = R.string.hint_turn_off; break;
                 case WORKING: title = R.string.power_working_title; tip = R.string.hint_turn_off; break;
-                case ATTENTION: title = R.string.power_attention_title; tip = R.string.hint_attention; break;
+                case ATTENTION: title = R.string.power_attention_title;
+                    tip = enabled ? R.string.hint_attention : R.string.hint_problem_off; break;
                 default: title = R.string.power_off_title; tip = keys == 0 ? R.string.hint_need_key : R.string.hint_turn_on;
             }
             headline.setText(title); hint.setText(tip);
             paintPower(tone);
+            showProblemChip(problem);
             ViewCompat.setStateDescription(power, s(enabled ? R.string.state_on : R.string.state_off));
         }
         if (accessTile != null) accessTile.setText(getString(R.string.key_count, keys));
@@ -746,7 +1106,7 @@ public final class MainActivity extends AppCompatActivity {
         if (moreTile != null) moreTile.setText(languageName());
         if (networkNow != null) networkNow.setText(networkDescription(null));
         if (wirelessHoldStatus != null) wirelessHoldStatus.setText(WirelessDebuggingHold.status(this));
-        if (status != null) status.setText(UiText.status(this, SshdService.state));
+        if (status != null) status.setText(UiText.status(this, state));
         if (wifiSummary != null) wifiSummary.setText(summary(NetworkSettings.Kind.WIFI));
         if (mobileSummary != null) mobileSummary.setText(summary(NetworkSettings.Kind.MOBILE));
         if (rootStatus != null && !rootRequest) {
@@ -768,7 +1128,9 @@ public final class MainActivity extends AppCompatActivity {
     @Override protected void onStop() {
         if (networkMonitor != null) networkMonitor.close();
         networkMonitor = null; unregisterReceiver(receiver);
-        if (pulse != null) { pulse.cancel(); pulse = null; }
+        if (tint != null) { tint.cancel(); tint = null; }
+        if (glow != null) glow.stop();
+        if (power != null) { power.animate().cancel(); power.setScaleX(1f); power.setScaleY(1f); }
         shownTone = null;
         super.onStop();
     }

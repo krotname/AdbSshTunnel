@@ -23,7 +23,8 @@ product tests or packaging. A failed check SHALL stop the existing `android` job
 
 ### Requirement: Implementation changes carry relevant specification changes
 Pull requests and pushes SHALL compare the exact event base against the checked
-out revision. Android, Linux and delivery-tooling changes SHALL include an
+out revision. Android, Linux and delivery-tooling changes, including CMake build
+manifests and OpenSpec configuration, SHALL include an
 added or modified specification for their respective capability group. Shared
 key-security specs MAY cover either product. Deleted or archived deltas SHALL
 provide no coverage. Active deltas used for coverage SHALL have a proposal,

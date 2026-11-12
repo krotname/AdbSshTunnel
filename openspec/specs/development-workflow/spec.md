@@ -46,6 +46,10 @@ design and task list.
 - **WHEN** a push or pull request cannot resolve its supplied comparison base
 - **THEN** the gate fails rather than silently skipping changed-file coverage
 
+#### Scenario: Code moves between product directories
+- **WHEN** an unchanged file moves between Android and Linux implementation paths
+- **THEN** both the removed and added paths require their respective specification coverage
+
 ### Requirement: Existing runner and tests remain authoritative
 The pipeline SHALL retain its owner-source restriction, repository-scoped Red
 ARC pool, cache contract, concurrency policy, timeout and existing native,

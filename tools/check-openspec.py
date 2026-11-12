@@ -89,7 +89,7 @@ def changed_paths(root: Path, base: str) -> list[str]:
         cwd=root, check=True, capture_output=True, text=True,
     ).stdout.strip()
     result = subprocess.run(
-        ['git', 'diff', '--name-only', '-z', resolved, 'HEAD', '--'],
+        ['git', 'diff', '--no-renames', '--name-only', '-z', resolved, 'HEAD', '--'],
         cwd=root, check=True, capture_output=True,
     )
     return [path for path in result.stdout.decode('utf-8').split('\0') if path]

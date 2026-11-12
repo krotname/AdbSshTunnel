@@ -82,7 +82,7 @@ class GateTest(unittest.TestCase):
             self.write(f'openspec/changes/example/{artifact}', 'details')
         self.assertEqual([], gate.check(self.root, paths))
 
-    def test_git_diff_includes_deleted_code_and_spaces(self):
+    def test_git_diff_includes_both_sides_of_renames_and_spaces(self):
         def git(*args):
             return subprocess.run(['git', *args], cwd=self.root, check=True,
                                   capture_output=True, text=True).stdout.strip()
@@ -94,7 +94,7 @@ class GateTest(unittest.TestCase):
         git('commit', '-qm', 'baseline')
         base = git('rev-parse', 'HEAD')
         (self.root / 'linux/old name.py').unlink()
-        self.write('app/new name.java', 'new')
+        self.write('app/new name.java', 'old')
         git('add', '-A')
         git('commit', '-qm', 'change')
         self.assertEqual(['app/new name.java', 'linux/old name.py'], gate.changed_paths(self.root, base))

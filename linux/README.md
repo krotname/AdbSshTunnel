@@ -1,6 +1,6 @@
 # ADB SSH Tunnel for Linux
 
-Version **2.3.1**. A native, adaptive GTK 4 / Libadwaita application for Linux
+Version **2.5.0**. A native, adaptive GTK 4 / Libadwaita application for Linux
 phones and desktops, with the same look as the Android app: a large round
 power button with an animated glow, four colour tiles and plain-language
 problem screens that say what happened and what to do. ARM64 and amd64 Debian packages are published separately
@@ -9,12 +9,12 @@ from the Android APKs. Kali/Phosh ARM64 is the mobile test platform.
 ## Install and connect
 
 Download the package for your architecture from the
-[Linux release](https://github.com/krotname/AdbSshTunnel/releases/tag/linux-v2.3.1).
+[Linux release](https://github.com/krotname/AdbSshTunnel/releases/tag/linux-v2.5.0).
 On Kali or a Debian-based system providing GTK >= 4.12, Libadwaita >= 1.4,
 Python >= 3.11 and `python3-asyncssh` >= 2.24 in its configured repositories:
 
 ```sh
-sudo apt install ./adb-ssh-tunnel_2.3.1_arm64.deb
+sudo apt install ./adb-ssh-tunnel_2.5.0_arm64.deb
 adb start-server
 adb-ssh-tunnel
 ```

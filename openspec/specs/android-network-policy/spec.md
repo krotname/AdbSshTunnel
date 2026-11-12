@@ -1,53 +1,46 @@
-# Android network policy
+# Сетевая политика Android
 
 ## Purpose
-
-Restrict Android tunnel availability to user-selected physical networks and
-revoke access when the network, its identity or the user's rules no longer
-permit it. The policy remains independent of VPN routing configuration.
+Ограничить туннель выбранными физическими сетями и отзывать доступ при изменении сети, её идентичности или правил независимо от настройки VPN-маршрутов.
 
 ## Requirements
 
-### Requirement: Explicit network policy with deny precedence
-Android SHALL evaluate Wi-Fi SSID and mobile operator identities against the
-selected allowlist or denylist mode. Explicit denial SHALL take precedence.
+### Requirement: Явная политика с приоритетом запрета
+Android SHALL проверять Wi-Fi SSID и идентификаторы мобильного оператора по выбранному режиму allowlist/denylist. Явный запрет SHALL иметь приоритет. Идентификаторы мобильного оператора Android не заменяются NetworkManager UUID из Linux.
 
-#### Scenario: Identity is both allowed and denied
-- **WHEN** the current network matches entries in both lists
-- **THEN** tunnel access on that network is denied
+#### Scenario: Сеть разрешена и запрещена одновременно
+- **WHEN** текущая сеть совпадает с записями обоих списков
+- **THEN** туннельный доступ запрещён
 
-#### Scenario: Allowlist is empty
-- **WHEN** allowlist mode has no matching permitted network
-- **THEN** the tunnel has no listener on that network
+#### Scenario: Пустой allowlist
+- **WHEN** в режиме allowlist нет совпавшей разрешённой сети
+- **THEN** listener на этой сети отсутствует
 
-#### Scenario: Known network in denylist mode
-- **WHEN** denylist mode is selected and a known eligible network has no matching denial
-- **THEN** the network policy permits it subject to the other tunnel prerequisites
+#### Scenario: Известная сеть в denylist-режиме
+- **WHEN** выбрана denylist и известная допустимая сеть не совпала с запретом
+- **THEN** политика разрешает сеть при выполнении остальных условий туннеля
 
-### Requirement: Unavailable identities fail closed
-Android SHALL deny network access when required identity information or the
-permission needed to obtain it is unavailable.
+### Requirement: Неизвестная идентичность закрывает доступ
+Android SHALL запрещать доступ при отсутствии требуемого идентификатора или разрешения для его получения.
 
-#### Scenario: Location permission or SSID is lost
-- **WHEN** the current Wi-Fi SSID can no longer be established
-- **THEN** access is revoked and the interface explains how to restore identity detection
+#### Scenario: Потеряно разрешение геолокации или SSID
+- **WHEN** SSID текущей Wi-Fi сети больше нельзя установить
+- **THEN** доступ отзывается, интерфейс объясняет восстановление определения сети
 
-### Requirement: Policy changes revoke established access
-Android SHALL reevaluate policy when network identity, addresses, permissions
-or stored rules change, closing sessions that are no longer authorized.
+### Requirement: Изменение политики отзывает текущий доступ
+Android SHALL пересматривать доступ при изменении идентификатора, адресов, разрешений или сохранённых правил, закрывая более не разрешённые сессии.
 
-#### Scenario: SSID changes without an address change
-- **WHEN** Wi-Fi changes to another SSID while retaining the same IP address
-- **THEN** old sessions close and the new SSID receives a fresh policy decision
+#### Scenario: SSID сменился при прежнем IP
+- **WHEN** Wi-Fi переключается на другой SSID с тем же IP
+- **THEN** прежние сессии закрываются, новый SSID получает отдельное решение политики
 
-#### Scenario: User changes a rule
-- **WHEN** a saved rule changes the active network's permission
-- **THEN** the new decision takes effect immediately and remains after process recreation
+#### Scenario: Пользователь изменил правило
+- **WHEN** сохранённое правило меняет разрешение текущей сети
+- **THEN** новое решение действует немедленно и сохраняется после пересоздания процесса
 
-### Requirement: Physical network decisions remain separate
-Android SHALL bind listeners only on eligible permitted networks, excluding IMS
-networks, and SHALL evaluate physical network identity independently of VPN state.
+### Requirement: Физические сети проверяются отдельно
+Android SHALL открывать listener только на допустимых разрешённых сетях, исключая IMS, и определять физическую идентичность независимо от VPN.
 
-#### Scenario: Wi-Fi and mobile are available together
-- **WHEN** multiple physical networks are present
-- **THEN** only networks individually permitted by policy expose tunnel access
+#### Scenario: Одновременно доступны Wi-Fi и мобильная сеть
+- **WHEN** доступны несколько физических сетей
+- **THEN** доступ предоставляется только через сети, каждая из которых отдельно разрешена

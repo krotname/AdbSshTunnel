@@ -1,75 +1,58 @@
-# Development workflow
+# Разработка и обязательный OpenSpec
 
 ## Purpose
-
-Make the product's OpenSpec contract a mandatory, reproducible part of the
-existing Android and Linux delivery pipeline while preserving its runner,
-cache, security boundaries and distinction between builds and publication.
+Закрепить русские контракты Android и Linux в обязательном воспроизводимом CI с сохранением runner, кэша, границ безопасности и различия сборки и публикации.
 
 ## Requirements
 
-### Requirement: All specifications are validated before builds
-Every supported CI event SHALL run the locked OpenSpec CLI in strict,
-noninteractive mode over all main specs and active changes before compilation,
-product tests or packaging. A failed check SHALL stop the existing `android` job.
+### Requirement: Строгая проверка до сборок
+Каждое поддерживаемое событие CI SHALL запускать закреплённый OpenSpec CLI для всех основных specs и активных changes в строгом неинтерактивном режиме до компиляции, продуктовых тестов и упаковки. Ошибка SHALL останавливать существующий job `android`.
 
-#### Scenario: A requirement has no valid scenario
-- **WHEN** a main spec or active delta fails strict validation
-- **THEN** CI fails before compiling or packaging either product
+#### Scenario: Требование без корректного сценария
+- **WHEN** основной spec или активная delta не проходит строгую валидацию
+- **THEN** CI завершается ошибкой до компиляции или упаковки обоих продуктов
 
-#### Scenario: Required baseline is removed
-- **WHEN** any of the five baseline capability specifications is absent or empty
-- **THEN** the repository gate fails even if the CLI reports no remaining items to validate
+#### Scenario: Удалён основной контракт
+- **WHEN** любая из пяти обязательных спецификаций отсутствует или пуста
+- **THEN** gate отклоняет репозиторий, даже если CLI больше нечего валидировать
 
-### Requirement: Implementation changes carry relevant specification changes
-Pull requests and pushes SHALL compare the exact event base against the checked
-out revision. Android, Linux and delivery-tooling changes, including CMake build
-manifests and OpenSpec configuration, SHALL include an
-added or modified specification for their respective capability group. Shared
-key-security specs MAY cover either product. Deleted or archived deltas SHALL
-provide no coverage. Active deltas used for coverage SHALL have a proposal,
-design and task list.
+### Requirement: Соответствующая спецификация в том же изменении
+PR и push SHALL сравниваться с точным base SHA события. Android, Linux и инструменты доставки, включая CMake и OpenSpec config, SHALL иметь добавленную или изменённую спецификацию своей группы. Общий key-security MAY покрывать обе платформы. Удалённые и архивные delta не дают покрытия; активная delta SHALL иметь proposal, design и tasks.
 
-#### Scenario: Native Android implementation stored under tools
-- **WHEN** Android tunnel headers, native patch preparation or their regression tools change under `tools/`
-- **THEN** Android capability coverage is required and a workflow-only spec edit does not satisfy it
+#### Scenario: Native Android хранится в tools
+- **WHEN** меняются Android tunnel headers, подготовка native patch или их регрессионные инструменты в `tools/`
+- **THEN** требуется Android-контракт; workflow-spec не даёт покрытия
 
-#### Scenario: Code changes without matching specification changes
-- **WHEN** Android implementation changes while only a Linux or workflow spec changes
-- **THEN** CI rejects the uncovered Android change
+#### Scenario: Изменена чужая платформенная спецификация
+- **WHEN** меняется Android-реализация, но только Linux- или workflow-spec
+- **THEN** CI отклоняет непокрытое изменение Android
 
-#### Scenario: Documentation-only update
-- **WHEN** a PR changes ordinary documentation or images without changing implementation or behavioral instructions
-- **THEN** all specs are validated without requiring an unrelated specification edit
+#### Scenario: Только обычная документация
+- **WHEN** изменены обычные документы или изображения без реализации и поведенческих инструкций
+- **THEN** все specs валидируются без посторонней правки контракта
 
-#### Scenario: Diff base is missing or invalid
-- **WHEN** a push or pull request cannot resolve its supplied comparison base
-- **THEN** the gate fails rather than silently skipping changed-file coverage
+#### Scenario: Base не разрешается
+- **WHEN** push или PR не может разрешить переданный base
+- **THEN** gate завершается ошибкой, не пропуская покрытие молча
 
-#### Scenario: Code moves between product directories
-- **WHEN** an unchanged file moves between Android and Linux implementation paths
-- **THEN** both the removed and added paths require their respective specification coverage
+#### Scenario: Перенос между платформами
+- **WHEN** неизменённый файл переносится между Android и Linux
+- **THEN** удалённый и добавленный пути требуют покрытия своих платформ
 
-### Requirement: Existing runner and tests remain authoritative
-The pipeline SHALL retain its owner-source restriction, repository-scoped Red
-ARC pool, cache contract, concurrency policy, timeout and existing native,
-Linux and Android tests. Main SHALL require both `android` and `OpenSpec required`
-status checks without introducing a human approval gate. The latter SHALL always
-check the Android job result on an isolated GitHub-hosted runner, without checking
-out code or accessing the Red cache, and SHALL accept only `success`.
+### Requirement: Существующие runner и тесты обязательны
+CI SHALL сохранять owner-source restriction, отдельный Red ARC pool репозитория, кэш, concurrency, timeout и существующие native/Linux/Android тесты. Main SHALL требовать `android` и `OpenSpec required` без человеческого approval. Последний SHALL всегда проверять результат Android job на изолированном GitHub-hosted runner без checkout и доступа к Red cache, принимая только `success`.
 
-#### Scenario: OpenSpec succeeds but a product test fails
-- **WHEN** the later native, Linux or Android checks fail
-- **THEN** the required CI check fails and the change remains unmergeable
+#### Scenario: Тест упал после успешного OpenSpec
+- **WHEN** native, Linux или Android-проверки завершились ошибкой
+- **THEN** обязательный статус неуспешен и merge блокируется
 
-#### Scenario: The owner-source restriction skips Android CI
-- **WHEN** a fork or an unsupported actor causes the Android job to be skipped
-- **THEN** the final required check fails, preserving the owner-only Red boundary and preventing a merge without validation
+#### Scenario: Owner-source restriction пропустил Android job
+- **WHEN** fork или неподдерживаемый actor привёл к skipped Android
+- **THEN** итоговый обязательный статус неуспешен, сохраняя owner-only границу Red
 
-### Requirement: Verification claims match their evidence
-Specifications and reports SHALL distinguish structural validation, regression
-tests, device acceptance, signed artifacts, installation and public release.
+### Requirement: Русский язык и точность доказательств
+Требования, сценарии и документы изменений SHALL писаться по-русски, сохраняя синтаксис OpenSpec. Контракт и отчёт SHALL различать структурную валидацию, регрессии, испытания устройства, подписанный пакет, установку и публикацию. Проверка Android SHALL NOT считаться проверкой Linux и наоборот.
 
-#### Scenario: CI produces unsigned packages
-- **WHEN** CI validates specs and builds unsigned artifacts
-- **THEN** the result is recorded as tested build evidence without claiming device installation or store publication
+#### Scenario: CI создал неподписанный пакет
+- **WHEN** CI проверил specs и собрал артефакты без установки
+- **THEN** фиксируется результат сборки без утверждения об установке или публикации

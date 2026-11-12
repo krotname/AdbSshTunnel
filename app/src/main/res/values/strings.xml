@@ -1,4 +1,14 @@
 <resources>
+    <string name="share_connection">Share connection</string>
+    <string name="share_connection_title">ADB SSH Tunnel — phone connection</string>
+    <string name="share_tunnel_on">Tunnel is enabled. Availability depends on the current network and ADB status.</string>
+    <string name="share_tunnel_off">Tunnel is disabled. Enable it on the phone before connecting.</string>
+    <string name="share_no_address">No allowed network address is available. Allow a network on the phone and share again.</string>
+    <string name="share_endpoint">Phone: %1$s · SSH port: 19191</string>
+    <string name="share_client_help">On your computer, replace YOUR_KEY with your SSH private key path and USER with your SSH username. Its public key must already be allowed on the phone. Run the SSH command first, keep it open, then run adb connect in another terminal. The ADB forwarding target is always 127.0.0.1:5555. Local phone addresses may require the same network or routing; mobile NAT can prevent access.</string>
+    <string name="share_host_help">Verify this server fingerprint through a trusted channel before trusting it. Pin the public key in the computer’s known_hosts as [PHONE_ADDRESS]:19191 followed by the public key above. This configuration contains no private keys or passwords. Network addresses can change.</string>
+    <string name="legacy_adb_mode">ADB after USB activation (Android 10)</string>
+    <string name="android10_legacy_setup">On Android 10 without root: enable USB debugging, connect to a trusted computer, accept its RSA prompt and run adb -d tcpip 5555. Then enable this tunnel. Repeat USB activation after each phone reboot. This also opens the Android ADB port 5555 on the network: use only a trusted network. The app cannot firewall that port without root. Run adb usb from the connected computer to close network ADB when finished. Android RSA authorization and SSH keys remain required.</string>
     <string name="persistent_usb">Keep USB debugging for trusted computers</string>
     <string name="persistent_usb_help">Root keeps USB debugging enabled and prevents approved ADB keys from expiring. New computers still require Android RSA confirmation. After reboot, recovery needs root and may need the first unlock. Turning this off restores the previous key timeout and leaves USB debugging as it is.</string>
     <string name="root_su_missing">su was not found. Root is unavailable: it may be disabled, hidden from this app or not installed. To use SSH without root, choose Wireless Debugging in ADB mode.</string>

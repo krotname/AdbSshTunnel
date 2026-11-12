@@ -2,7 +2,7 @@
 
 ## Linux
 
-- Версия Linux: `linux/adb_ssh_tunnel/__init__.py`, **2.3.0**; Android 2.3.0.
+- Версия Linux: `linux/adb_ssh_tunnel/__init__.py`, **2.3.0**; Android 2.4.0.
 - App ID `name.krot.adbsshtunnel.linux`, Debian package `adb-ssh-tunnel`.
 - Артефакты: `adb-ssh-tunnel_2.3.0_arm64.deb` и `adb-ssh-tunnel_2.3.0_amd64.deb`,
   `SHA256SUMS` и manifest с точным source SHA, версиями зависимостей и проверками.
@@ -34,9 +34,10 @@
 | Репозиторий | `krotname/AdbSshTunnel`, public, main |
 | Страница продукта | Публичный репозиторий https://github.com/krotname/AdbSshTunnel; README — основной лендинг, отдельный сайт не используется |
 | Package | `name.krot.adbsshtunnel` |
-| Публичная версия | `app/build.gradle`: 2.3.0 (SemVer 2.0.0) |
-| Android versionCode | 14; отдельное техническое поле |
-| APK | Два варианта `full` и `rustore`, каждый с arm64-v8a и x86_64; package и ключ подписи общие |
+| Публичная версия | `app/build.gradle`: 2.4.0 (SemVer 2.0.0) |
+| Android versionCode | 15; отдельное техническое поле |
+| Android | API 29 / Android 10 и новее; Android 10 без root — ручное включение ADB через USB после перезагрузки, с обязательным RSA; штатная беспроводная отладка — с Android 11 |
+| APK | Два варианта `full` и `rustore`, каждый с armeabi-v7a, arm64-v8a и x86_64; package и ключ подписи общие |
 | Сборка | Red / Linux, изолированный непривилегированный ARC job с постоянным кэшем; Windows-сборки только White |
 | Toolchain | SDK 36 / JDK 21 / Java 17 / AGP 8.10.1 / Gradle 8.11.1 |
 | Native | Sshd4a `897f9064a7279bff89538ec87729c43888f3b83d`, NDK 27.2.12479018, CMake 3.22.1 |

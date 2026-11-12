@@ -7,6 +7,30 @@ import subprocess
 import zipfile
 
 
+ABIS = {'armeabi-v7a': (1, 40), 'arm64-v8a': (2, 183), 'x86_64': (2, 62)}
+
+
+def validate_executable(image, abi):
+    elf_class, machine = ABIS[abi]
+    header_size = 52 if elf_class == 1 else 64
+    if (len(image) < header_size or image[:6] != b'\x7fELF' + bytes((elf_class, 1))
+            or struct.unpack_from('<HH', image, 16) != (3, machine)):
+        raise ValueError('invalid native executable')
+    if elf_class == 1:
+        phoff = struct.unpack_from('<I', image, 28)[0]
+        phsize, phcount = struct.unpack_from('<HH', image, 42)
+        minimum_phsize = 32
+    else:
+        phoff = struct.unpack_from('<Q', image, 32)[0]
+        phsize, phcount = struct.unpack_from('<HH', image, 54)
+        minimum_phsize = 56
+    if phsize < minimum_phsize or phoff < header_size or phoff + phsize * phcount > len(image):
+        raise ValueError('invalid ELF program headers')
+    if not any(struct.unpack_from('<I', image, phoff + i * phsize)[0] == 3
+               for i in range(phcount)):
+        raise ValueError('native daemon has no ELF interpreter')
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--aapt', required=True)
@@ -26,27 +50,27 @@ def main():
         if (package.get('name'), package.get('versionName'), package.get('versionCode')) != (
                 'name.krot.adbsshtunnel', version, code):
             raise SystemExit(f'{flavor}: unexpected package or release version: {package}')
+        if "sdkVersion:'29'" not in badging:
+            raise SystemExit(f'{flavor}: Android 10 (API 29) must be supported')
+        native_line = next((line for line in badging.splitlines() if line.startswith('native-code:')), '')
+        if set(re.findall(r"'([^']+)'", native_line)) != set(ABIS):
+            raise SystemExit(f'{flavor}: unexpected packaged ABIs: {native_line}')
         permissions = set(re.findall(r"uses-permission(?:-sdk-23)?: name='([^']+)'", badging))
         has_hold = 'android.permission.WRITE_SECURE_SETTINGS' in permissions
         if has_hold != (flavor == 'full'):
             raise SystemExit(f'{flavor}: incorrect WRITE_SECURE_SETTINGS declaration')
         permission_sets[flavor] = permissions
         with zipfile.ZipFile(apk) as archive:
-            for abi in ('arm64-v8a', 'x86_64'):
+            for abi in ABIS:
                 for name in (f'assets/{abi}/root-controller', f'lib/{abi}/libjni-dropbear.so',
                              f'lib/{abi}/libtunnel-server.so'):
                     if archive.getinfo(name).file_size == 0:
                         raise SystemExit(f'{flavor}: empty native payload {name}')
-                name = f'lib/{abi}/libtunnel-server.so'
-                image = archive.read(name)
-                if (image[:6] != b'\x7fELF\x02\x01' or len(image) < 64
-                        or struct.unpack_from('<HH', image, 16) != (3, 183 if abi == 'arm64-v8a' else 62)):
-                    raise SystemExit(f'{flavor}: invalid native executable {name}')
-                phoff = struct.unpack_from('<Q', image, 32)[0]
-                phsize, phcount = struct.unpack_from('<HH', image, 54)
-                if not any(struct.unpack_from('<I', image, phoff + i * phsize)[0] == 3
-                           for i in range(phcount)):
-                    raise SystemExit(f'{flavor}: native daemon has no ELF interpreter: {name}')
+                for name in (f'lib/{abi}/libtunnel-server.so', f'assets/{abi}/root-controller'):
+                    try:
+                        validate_executable(archive.read(name), abi)
+                    except ValueError as error:
+                        raise SystemExit(f'{flavor}: {error}: {name}') from error
         print(f'{flavor}: {version}, package and native payloads verified; keep-enabled={has_hold}')
     if permission_sets['full'] - {'android.permission.WRITE_SECURE_SETTINGS'} != permission_sets['rustore']:
         raise SystemExit('Unexpected permission differences between distributions')

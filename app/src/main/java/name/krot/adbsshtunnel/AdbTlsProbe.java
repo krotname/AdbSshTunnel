@@ -21,11 +21,17 @@ public final class AdbTlsProbe {
         }
     }
     public static void verifyPlain(int port) throws IOException {
+        verifyPlain(port, false);
+    }
+    public static void verifyAuthenticatedPlain(int port) throws IOException {
+        verifyPlain(port, true);
+    }
+    private static void verifyPlain(int port, boolean requireAuth) throws IOException {
         if (port < 1024 || port > 65535) throw new IOException("Invalid root ADB port");
         try (Socket socket = new Socket()) {
             socket.connect(new InetSocketAddress("127.0.0.1", port), 750);
             socket.setSoTimeout(1000);
-            exchangePlain(socket.getInputStream(), socket.getOutputStream());
+            exchangePlain(socket.getInputStream(), socket.getOutputStream(), requireAuth);
         }
     }
     private static void sendConnect(OutputStream output) throws IOException {
@@ -45,6 +51,9 @@ public final class AdbTlsProbe {
             throw new IOException("Endpoint is not ADB Wireless Debugging");
     }
     static void exchangePlain(InputStream input, OutputStream output) throws IOException {
+        exchangePlain(input, output, false);
+    }
+    static void exchangePlain(InputStream input, OutputStream output, boolean requireAuth) throws IOException {
         sendConnect(output);
         DataInputStream stream = new DataInputStream(input);
         byte[] header = new byte[24]; stream.readFully(header);
@@ -54,6 +63,7 @@ public final class AdbTlsProbe {
         boolean auth = command == AUTH && arg0 == 1 && arg1 == 0 && length == 20;
         boolean connected = command == CNXN && (arg0 == 0x01000000 || arg0 == 0x01000001) &&
                 arg1 >= 4096 && arg1 <= 1048576 && length > 0 && length <= 4096;
+        if (requireAuth && !auth) throw new IOException("Legacy ADB must require Android RSA authentication");
         if (magic != ~command || !(auth || connected)) throw new IOException("Endpoint is not root ADB");
         byte[] payload = new byte[length]; stream.readFully(payload);
         int sum = 0; for (byte b : payload) sum += b & 0xff;

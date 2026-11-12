@@ -92,7 +92,9 @@ public final class NetworkMonitor implements AutoCloseable {
             registerNetworks();
             subscriptions = context.getSystemService(SubscriptionManager.class);
             if (subscriptions != null && ContextCompat.checkSelfPermission(context, Manifest.permission.READ_PHONE_STATE) == PackageManager.PERMISSION_GRANTED) {
-                subscriptions.addOnSubscriptionsChangedListener(context.getMainExecutor(), subscriptionChanges);
+                if (Build.VERSION.SDK_INT >= 30)
+                    subscriptions.addOnSubscriptionsChangedListener(context.getMainExecutor(), subscriptionChanges);
+                else subscriptions.addOnSubscriptionsChangedListener(subscriptionChanges);
                 subscriptionsRegistered = true;
             }
         } catch (RuntimeException e) { close(); listener.onNetworks(Collections.emptyList()); }
@@ -127,7 +129,7 @@ public final class NetworkMonitor implements AutoCloseable {
     private String wifiIdentity(NetworkCapabilities caps) {
         if (!canReadWifi()) return null;
         WifiInfo info = caps.getTransportInfo() instanceof WifiInfo ? (WifiInfo) caps.getTransportInfo() : null;
-        if (info == null && Build.VERSION.SDK_INT == 30) {
+        if (info == null && Build.VERSION.SDK_INT <= 30) {
             WifiManager wifi = context.getApplicationContext().getSystemService(WifiManager.class);
             if (wifi != null) info = wifi.getConnectionInfo();
         }
@@ -140,15 +142,16 @@ public final class NetworkMonitor implements AutoCloseable {
     @SuppressWarnings("deprecation")
     private TelephonyManager mobileManager(NetworkCapabilities caps) {
         if (ContextCompat.checkSelfPermission(context, Manifest.permission.READ_PHONE_STATE) != PackageManager.PERMISSION_GRANTED) return null;
-        NetworkSpecifier specifier = caps.getNetworkSpecifier();
+        NetworkSpecifier specifier = Build.VERSION.SDK_INT >= 30 ? caps.getNetworkSpecifier() : null;
         int subscription = SubscriptionManager.INVALID_SUBSCRIPTION_ID;
-        if (specifier instanceof TelephonyNetworkSpecifier)
+        if (Build.VERSION.SDK_INT >= 30 && specifier instanceof TelephonyNetworkSpecifier)
             subscription = ((TelephonyNetworkSpecifier) specifier).getSubscriptionId();
         if (subscription == SubscriptionManager.INVALID_SUBSCRIPTION_ID) {
             long mobileNetworks = observed.values().stream().filter(value -> value.capabilities != null
                 && value.capabilities.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR)
                 && value.capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)).count();
-            if (mobileNetworks == 1) subscription = SubscriptionManager.getActiveDataSubscriptionId();
+            if (mobileNetworks == 1) subscription = Build.VERSION.SDK_INT >= 30
+                ? SubscriptionManager.getActiveDataSubscriptionId() : SubscriptionManager.getDefaultDataSubscriptionId();
         }
         if (subscription == SubscriptionManager.INVALID_SUBSCRIPTION_ID) return null;
         TelephonyManager phone = context.getSystemService(TelephonyManager.class);

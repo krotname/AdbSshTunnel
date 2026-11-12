@@ -8,6 +8,21 @@ import java.util.Arrays;
 import static org.junit.Assert.*;
 
 public class AdbTlsProbeTest {
+    @Test public void legacyModeRequiresRsaChallenge() throws Exception {
+        byte[] token = new byte[20]; Arrays.fill(token, (byte) 7);
+        AdbTlsProbe.exchangePlain(new ByteArrayInputStream(packet(0x48545541, 1, 0, token)),
+            new ByteArrayOutputStream(), true);
+        for (byte[] response : new byte[][] {
+                packet(0x4e584e43, 0x01000001, 4096, "device::\0".getBytes(StandardCharsets.US_ASCII)),
+                packet(0x48545541, 2, 0, token),
+                packet(0x48545541, 1, 0, new byte[19]),
+                packet(0x534c5453, 0x01000000, 0, new byte[0])}) {
+            try {
+                AdbTlsProbe.exchangePlain(new ByteArrayInputStream(response), new ByteArrayOutputStream(), true);
+                fail("Accepted legacy ADB without an RSA challenge");
+            } catch (IOException expected) { }
+        }
+    }
     private byte[] packet(int command, int arg0, int arg1, byte[] payload) throws IOException {
         ByteArrayOutputStream bytes = new ByteArrayOutputStream();
         bytes.write(reply(command, arg0, arg1, payload.length, 0, ~command)); bytes.write(payload);

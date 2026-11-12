@@ -14,7 +14,7 @@ forward one local port. The tunnel reaches only this phone's local ADB.
 [Setup guide](docs/USAGE.md) ·
 [Ask a question](https://github.com/krotname/AdbSshTunnel/issues)
 
-**Android 11+** · **arm64-v8a / x86_64** · **Version 2.3.0** · **GPL-3.0**
+**Android 10+** · **armeabi-v7a / arm64-v8a / x86_64** · **Version 2.4.0** · **GPL-3.0**
 
 **Linux phone or desktop?** The [Linux edition](linux/README.md) uses a native,
 adaptive GTK interface and a restricted tunnel to the Linux SDK ADB server.
@@ -25,6 +25,7 @@ It is a separate package from the Android APK; see its setup and limitations.
 | Feature | How it helps |
 |---|---|
 | Wireless Debugging without root | Pair with Android's ADB; the app discovers its current local connect port. |
+| Android 10 without root | Activate ADB once over USB after each reboot; the app tunnels the RSA-authenticated local ADB endpoint. |
 | Root ADB mode | Use the protected native root controller on a supported rooted device. |
 | Keep USB debugging (root) | Restore USB ADB and keep approved keys from expiring; new computers still need Android RSA confirmation. |
 | Key-only SSH | Keep the private key on your computer; import only its OpenSSH public key. |
@@ -37,11 +38,21 @@ rules and imported public keys stay on the device. See the [privacy policy](docs
 
 ## Connect without root
 
-You need an Android 11+ phone, a computer with `adb` and an OpenSSH client,
+On Android 10 without root, first enable USB debugging, connect the phone to a
+trusted computer, approve its RSA key and run `adb -d tcpip 5555`. Select
+**ADB after USB activation (Android 10)** in the app. Repeat USB activation after
+each phone reboot. This opens Android's ADB port 5555 on the network as well;
+use only a trusted network. Without root the app cannot firewall that port.
+Run `adb usb` from the connected computer when finished to close network ADB.
+SSH keys and Android RSA authorization remain required; TLS pairing is available
+only on Android 11+. The app refuses a legacy ADB daemon that accepts connections
+without RSA authentication.
+
+You need an Android 10+ phone, a computer with `adb` and an OpenSSH client,
 and a network path from the computer to the phone. Start on trusted Wi-Fi.
 
 1. Install the APK from [GitHub Releases](https://github.com/krotname/AdbSshTunnel/releases/latest).
-2. Enable **Developer options → Wireless debugging** on the phone. Use the pairing address and port shown by Android:
+2. On Android 11+, enable **Developer options → Wireless debugging** on the phone. Use the pairing address and port shown by Android:
 
    ```sh
    adb pair PHONE_IP:PAIR_PORT
@@ -62,6 +73,10 @@ and a network path from the computer to the phone. Start on trusted Wi-Fi.
    ```
 
 Replace `PHONE_IP`, `PAIR_PORT`, `YOUR_KEY` and `USER` with your connection values.
+The share icon at the top right of the home screen sends this phone's connection
+configuration through Android's share menu: allowed network addresses, SSH/ADB
+commands, the public server key and setup instructions. It includes no private
+keys or passwords. Verify the server fingerprint through a trusted channel.
 The SSH forwarding target stays **`127.0.0.1:5555`**: the app maps it to Android's
 current local ADB port. The pairing port is separate. When Android changes the
 connect port, reopen SSH using the same command.

@@ -7,6 +7,13 @@ import org.junit.Test;
 import static org.junit.Assert.*;
 
 public final class RootHelperTest {
+    @Test public void controllerMatchesSupportedDeviceArchitecture() throws Exception {
+        assertEquals("armeabi-v7a", RootHelper.controllerAbi(new String[]{"armeabi-v7a", "armeabi"}));
+        assertEquals("arm64-v8a", RootHelper.controllerAbi(new String[]{"arm64-v8a", "armeabi-v7a"}));
+        assertEquals("x86_64", RootHelper.controllerAbi(new String[]{"x86_64", "x86"}));
+        assertThrows(IOException.class, () -> RootHelper.controllerAbi(new String[]{"x86"}));
+    }
+
     @Test public void cancelledGuardLeavesConfigurationRunning() throws Exception {
         WaitingProcess guard = new WaitingProcess("checked");
         WaitingProcess configuration = new WaitingProcess("configured");

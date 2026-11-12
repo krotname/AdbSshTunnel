@@ -43,6 +43,35 @@ with tempfile.TemporaryDirectory() as tmp, patch.dict(os.environ, {'XDG_CONFIG_H
             assert app.window.get_width() <= width, (language, width, app.window.get_width())
             assert app.status.get_text(), 'The status must be visible'
             assert app.toggle.get_sensitive(), 'The start/stop control must be available'
-            print(f'GTK {language} {width}px: layout and controls OK')
+            for opener in (app.open_connect, app.open_networks, app.open_add_key, app.open_port, app.open_more):
+                opener()
+                settle()
+                assert app.window.get_width() <= width, (opener.__name__, language, width, app.window.get_width())
+                app.nav.pop_to_tag('main')
+            settle()
+            print(f'GTK {language} {width}px: layout, controls and deeper pages OK')
+        # Linux phones: the whole main screen fits a short window without scrolling.
+        app.window.set_default_size(360, 680)
+        settle()
+        scroll = app.main_scroll.get_vadjustment()
+        assert app.compact, 'A short window must switch to the compact main screen'
+        assert scroll.get_upper() <= scroll.get_page_size() + 1, (language, scroll.get_upper(), scroll.get_page_size())
+        app.window.set_default_size(420, 800)
+        settle()
+        assert not app.compact, 'A tall window must leave the compact main screen'
+        print(f'GTK {language} 360x680: compact main screen fits without scrolling')
+    # A failed write must show its own reason, not the port-range hint.
+    app.open_port()
+    settle()
+    app.port.set_text('19192')
+    with patch('adb_ssh_tunnel.ui.save_config', side_effect=OSError('No space left on device')):
+        app.change_port(app.port)
+    assert 'No space left on device' in app.port_error.get_text(), app.port_error.get_text()
+    assert app.cfg['port'] != 19192, 'A port that was not saved must not be shown as saved'
+    app.port.set_text('80')
+    app.change_port(app.port)
+    assert '1024' in app.port_error.get_text(), app.port_error.get_text()
+    app.nav.pop_to_tag('main')
+    print('GTK port errors: write failure and invalid number are told apart')
     app.window.destroy()
     app.quit()

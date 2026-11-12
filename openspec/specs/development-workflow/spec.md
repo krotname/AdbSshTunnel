@@ -53,12 +53,18 @@ design and task list.
 ### Requirement: Existing runner and tests remain authoritative
 The pipeline SHALL retain its owner-source restriction, repository-scoped Red
 ARC pool, cache contract, concurrency policy, timeout and existing native,
-Linux and Android tests. Main SHALL require the `android` status check without
-introducing a human approval gate.
+Linux and Android tests. Main SHALL require both `android` and `OpenSpec required`
+status checks without introducing a human approval gate. The latter SHALL always
+check the Android job result on an isolated GitHub-hosted runner, without checking
+out code or accessing the Red cache, and SHALL accept only `success`.
 
 #### Scenario: OpenSpec succeeds but a product test fails
 - **WHEN** the later native, Linux or Android checks fail
 - **THEN** the required CI check fails and the change remains unmergeable
+
+#### Scenario: The owner-source restriction skips Android CI
+- **WHEN** a fork or an unsupported actor causes the Android job to be skipped
+- **THEN** the final required check fails, preserving the owner-only Red boundary and preventing a merge without validation
 
 ### Requirement: Verification claims match their evidence
 Specifications and reports SHALL distinguish structural validation, regression

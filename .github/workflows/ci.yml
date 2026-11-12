@@ -108,3 +108,20 @@ jobs:
           name: reports-${{ github.sha }}
           path: app/build/reports/
           retention-days: 1
+  openspec-required:
+    name: OpenSpec required
+    if: ${{ always() }}
+    needs: android
+    runs-on: ubuntu-24.04
+    permissions: {}
+    timeout-minutes: 2
+    steps:
+      # No checkout, cache or product execution: skipped owner-only CI must fail closed.
+      - name: Require successful validated Android CI
+        env:
+          ANDROID_RESULT: ${{ needs.android.result }}
+        run: |
+          if [ "$ANDROID_RESULT" != success ]; then
+            echo "::error::Android CI including OpenSpec finished with $ANDROID_RESULT"
+            exit 1
+          fi

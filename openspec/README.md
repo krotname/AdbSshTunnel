@@ -47,6 +47,8 @@ invalid bases fail. Manual workflow runs validate the current snapshot.
 
 The existing `android` check runs these gates before native compilation,
 Linux packaging and Android tests/builds. It has no path filter or optional
-failure setting. Main requires that check. Structural validation and changed
-file coverage do not prove semantic agreement between code and prose: inspect
+failure setting. Main requires that check and `OpenSpec required`. The final
+check runs on GitHub-hosted Ubuntu without checkout or shared cache and requires
+an actual successful Android job; skipped, cancelled and failed jobs are rejected.
+Structural validation and changed file coverage do not prove semantic agreement between code and prose: inspect
 the diff and run the referenced tests and device acceptance when affected.

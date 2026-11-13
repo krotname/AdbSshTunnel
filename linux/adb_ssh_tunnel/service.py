@@ -180,6 +180,23 @@ def _live_pid(pid: int) -> bool:
     return True
 
 
+def _reap(pid: int) -> None:
+    """Reap a supervised child to avoid zombies; best effort."""
+    for _ in range(100):
+        try:
+            done, _status = os.waitpid(pid, os.WNOHANG)
+        except ChildProcessError:
+            return
+        except OSError:
+            return
+        if done == pid:
+            return
+        if done == 0 and not _live_pid(pid):
+            # Already reaped elsewhere, or not our child.
+            return
+        time.sleep(0.05)
+
+
 class SnapSupervisor:
     """Supervise the Snap's own ``serve`` child in this process's scope."""
 
@@ -190,6 +207,7 @@ class SnapSupervisor:
         self.launcher = launcher
         self.log_path = log_path or (data / SERVE_LOG if data else self.runtime_dir / SERVE_LOG)
         self.pid_file = self.runtime_dir / SERVE_PID
+        self._proc: subprocess.Popen | None = None
         self._last_start = 0.0
 
     def _resolve_launcher(self) -> Path | None:
@@ -197,7 +215,19 @@ class SnapSupervisor:
             return self.launcher
         return snap_launcher()
 
+    def _owned_alive(self) -> bool:
+        proc = self._proc
+        if proc is None:
+            return False
+        if proc.poll() is None:
+            return True
+        self._proc = None
+        return False
+
     def pid(self) -> int | None:
+        if self._owned_alive():
+            assert self._proc is not None
+            return self._proc.pid
         try:
             value = int(self.pid_file.read_text(encoding='utf-8').strip())
         except (OSError, ValueError):
@@ -221,6 +251,7 @@ class SnapSupervisor:
                 proc = subprocess.Popen([str(launcher), 'serve'], stdin=subprocess.DEVNULL,
                                         stdout=log, stderr=subprocess.STDOUT,
                                         close_fds=True, cwd=str(self.runtime_dir))
+            self._proc = proc
             self.pid_file.write_text(str(proc.pid) + '\n', encoding='utf-8')
             self._last_start = time.monotonic()
             time.sleep(0.3)
@@ -232,6 +263,25 @@ class SnapSupervisor:
 
     def stop(self) -> str:
         """Stop the serve child; return '' on success or an error message."""
+        if self._owned_alive():
+            assert self._proc is not None
+            proc, self._proc = self._proc, None
+            try:
+                proc.terminate()
+                try:
+                    proc.wait(timeout=5)
+                except subprocess.TimeoutExpired:
+                    proc.kill()
+                    proc.wait(timeout=5)
+            except (OSError, subprocess.SubprocessError) as exc:
+                error = str(exc)[:300]
+            else:
+                error = ''
+            try:
+                self.pid_file.unlink()
+            except OSError:
+                pass
+            return error
         pid = self.pid()
         if pid is None:
             try:
@@ -243,6 +293,8 @@ class SnapSupervisor:
             os.kill(pid, signal.SIGTERM)
         except OSError as exc:
             error = str(exc)[:300]
+            if 'No such process' in error:
+                _reap(pid)
             try:
                 self.pid_file.unlink()
             except OSError:
@@ -258,6 +310,7 @@ class SnapSupervisor:
                 os.kill(pid, signal.SIGKILL)
             except OSError:
                 pass
+        _reap(pid)
         try:
             self.pid_file.unlink()
         except OSError:

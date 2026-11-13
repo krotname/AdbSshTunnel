@@ -95,8 +95,15 @@ English and Russian are available in **More**.
 
 ## Snap package (strict confinement)
 
-The Snap release carries the same 2.6.0 code under strict confinement
-(`snap install adb-ssh-tunnel`). Inside the Snap, `systemctl` is
+The Snap release carries the same 2.6.0 code under strict confinement.
+Install it from the Snap Store (`latest/stable` channel, published as
+`adb-ssh-tunnel` by Kreout):
+
+    snap install adb-ssh-tunnel
+
+It is also discoverable through GNOME Software search. `snap info
+adb-ssh-tunnel` shows the installed revision and tracking channel.
+Inside the Snap, `systemctl` is
 unavailable, so the app supervises its own background `serve` child
 instead of a systemd unit:
 

@@ -21,6 +21,8 @@ forward one local port. The tunnel reaches only this phone's local ADB.
 **Linux phone or desktop?** The [Linux edition](linux/README.md) uses a native,
 adaptive GTK interface and a restricted tunnel to the Linux SDK ADB server.
 It is a separate package from the Android APK; see its setup and limitations.
+It is also available as a strictly confined Snap: `snap install adb-ssh-tunnel`
+([Snap Store page](https://snapcraft.io/adb-ssh-tunnel)).
 
 ## What you get
 

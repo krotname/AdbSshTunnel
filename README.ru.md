@@ -5,6 +5,8 @@
 **Linux на телефоне или компьютере:** [Linux-версия](linux/README.md) — отдельный
 пакет с адаптивным интерфейсом GTK и ограниченным туннелем к локальному серверу
 ADB. Это сервер SDK в Linux, а не Android adbd; команды и ограничения отличаются.
+Также доступен строго изолированный Snap: `snap install adb-ssh-tunnel`
+([страница в Snap Store](https://snapcraft.io/adb-ssh-tunnel)).
 
 [English](README.md) · **Русский**
 

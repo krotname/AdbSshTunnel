@@ -27,21 +27,55 @@ def _problem(key, icon, title, what, todo, action, details=''):
     return Problem(key, icon, title, what, todo, action, details)
 
 
-def classify(config: dict, state: dict, network_identity: str = '', service_error: str = ''):
+def _service_texts(snap: bool):
+    if snap:
+        return ("Background tunnel didn't start", 'Фоновый туннель не запустился'), \
+            ('The app could not run its background tunnel process in this Snap session.',
+             'Не удалось запустить фоновый процесс туннеля в сеансе Snap.'), \
+            ('1. Tap Try again.\n2. If it repeats, quit the app from More and open it again.',
+             '1. Нажмите «Попробовать снова».\n2. Если повторится, выйдите из приложения '
+             'в «Дополнительно» и откройте его снова.')
+    return ("Background service didn't start", 'Фоновая служба не запустилась'), \
+        ('The system did not run adb-ssh-tunnel.service in your user session.',
+         'Система не запустила adb-ssh-tunnel.service в вашем сеансе.'), \
+        ('1. Tap Try again.\n2. If it repeats, run in a terminal:\n'
+         'systemctl --user status adb-ssh-tunnel.service',
+         '1. Нажмите «Попробовать снова».\n2. Если повторится, выполните в терминале:\n'
+         'systemctl --user status adb-ssh-tunnel.service')
+
+
+def _stopped_texts(snap: bool):
+    if snap:
+        return ("The tunnel process isn't running", 'Процесс туннеля не работает'), \
+            ('The tunnel is switched on, but its background process is not running.',
+             'Туннель включён, но его фоновый процесс не запущен.'), \
+            ('1. Tap Try again.\n2. If it repeats, quit the app from More and open it again.',
+             '1. Нажмите «Попробовать снова».\n2. Если повторится, выйдите из приложения '
+             'в «Дополнительно» и откройте его снова.')
+    return ("The tunnel service isn't running", 'Служба туннеля не работает'), \
+        ('The tunnel is switched on, but its background service is not running.',
+         'Туннель включён, но его фоновая служба не запущена.'), \
+        ('1. Tap Try again.\n2. If it repeats, run in a terminal:\n'
+         'journalctl --user -u adb-ssh-tunnel.service',
+         '1. Нажмите «Попробовать снова».\n2. Если повторится, выполните в терминале:\n'
+         'journalctl --user -u adb-ssh-tunnel.service')
+
+
+def classify(config: dict, state: dict, network_identity: str = '', service_error: str = '',
+             snap: bool = False):
     """Return (tone, problem). Tone is off, working, ready or attention.
 
     The problem is returned even before it is confirmed; the interface delays it.
+    When ``snap`` is true, the repair hints avoid systemctl/journalctl, which a
+    strictly confined Snap cannot use.
     """
     if service_error:
+        (title_en, title_ru), (what_en, what_ru), (todo_en, todo_ru) = _service_texts(snap)
         return 'attention', _problem(
             'service', 'dialog-warning-symbolic',
-            ("Background service didn't start", 'Фоновая служба не запустилась'),
-            ('The system did not run adb-ssh-tunnel.service in your user session.',
-             'Система не запустила adb-ssh-tunnel.service в вашем сеансе.'),
-            ('1. Tap Try again.\n2. If it repeats, run in a terminal:\n'
-             'systemctl --user status adb-ssh-tunnel.service',
-             '1. Нажмите «Попробовать снова».\n2. Если повторится, выполните в терминале:\n'
-             'systemctl --user status adb-ssh-tunnel.service'),
+            (title_en, title_ru),
+            (what_en, what_ru),
+            (todo_en, todo_ru),
             'retry', service_error)
     if not config.get('enabled'):
         return 'off', None
@@ -130,15 +164,12 @@ def classify(config: dict, state: dict, network_identity: str = '', service_erro
             'retry', error)
     if name == 'stopped':
         # Enabled, but the daemon has not written a fresh heartbeat.
+        (title_en, title_ru), (what_en, what_ru), (todo_en, todo_ru) = _stopped_texts(snap)
         return 'working', _problem(
             'stopped', 'dialog-warning-symbolic',
-            ("The tunnel service isn't running", 'Служба туннеля не работает'),
-            ('The tunnel is switched on, but its background service is not running.',
-             'Туннель включён, но его фоновая служба не запущена.'),
-            ('1. Tap Try again.\n2. If it repeats, run in a terminal:\n'
-             'journalctl --user -u adb-ssh-tunnel.service',
-             '1. Нажмите «Попробовать снова».\n2. Если повторится, выполните в терминале:\n'
-             'journalctl --user -u adb-ssh-tunnel.service'),
+            (title_en, title_ru),
+            (what_en, what_ru),
+            (todo_en, todo_ru),
             'retry')
     return 'working', None
 

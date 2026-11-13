@@ -1,6 +1,6 @@
 # ADB SSH Tunnel for Linux
 
-Version **2.5.0**. A native, adaptive GTK 4 / Libadwaita application for Linux
+Version **2.6.0**. A native, adaptive GTK 4 / Libadwaita application for Linux
 phones and desktops, with the same look as the Android app: a large round
 power button with an animated glow, four colour tiles and plain-language
 problem screens that say what happened and what to do. ARM64 and amd64 Debian packages are published separately
@@ -9,12 +9,12 @@ from the Android APKs. Kali/Phosh ARM64 is the mobile test platform.
 ## Install and connect
 
 Download the package for your architecture from the
-[Linux release](https://github.com/krotname/AdbSshTunnel/releases/tag/linux-v2.5.0).
+[Linux release](https://github.com/krotname/AdbSshTunnel/releases/tag/linux-v2.6.0).
 On Kali or a Debian-based system providing GTK >= 4.12, Libadwaita >= 1.4,
 Python >= 3.11 and `python3-asyncssh` >= 2.24 in its configured repositories:
 
 ```sh
-sudo apt install ./adb-ssh-tunnel_2.5.0_arm64.deb
+sudo apt install ./adb-ssh-tunnel_2.6.0_arm64.deb
 adb start-server
 adb-ssh-tunnel
 ```
@@ -92,6 +92,30 @@ For headless use configure the same JSON file and run `adb-ssh-tunnel serve`.
 Only one daemon per user is permitted. There is no boot/root mode, Android
 Wireless Debugging switch, Quick Settings tile, or Android USB-key retention.
 English and Russian are available in **More**.
+
+## Snap package (strict confinement)
+
+The Snap release carries the same 2.6.0 code under strict confinement
+(`snap install adb-ssh-tunnel`). Inside the Snap, `systemctl` is
+unavailable, so the app supervises its own background `serve` child
+instead of a systemd unit:
+
+- Closing the window hides the app instead of quitting: an enabled
+  tunnel keeps running. Reopen it from the app menu; use **More → Quit
+  application** to stop the tunnel and fully close the app.
+- **Start at sign-in** writes the app's own autostart entry, launched by
+  the system at the next login. A hidden launch brings an enabled tunnel
+  up without showing a window.
+- The tunnel still binds only the current approved address, allows only
+  known networks and keys, and stays fail-closed. Network identity is
+  read from NetworkManager over the system bus, which needs the
+  `network-manager-observe` connection (`snap connect
+  adb-ssh-tunnel:network-manager-observe` if it is not connected
+  automatically).
+- Settings, keys and host key live separately under
+  `~/snap/adb-ssh-tunnel/` and are never migrated from the Debian
+  package. Diagnostics shows the Snap log file path instead of
+  `journalctl`.
 
 ## Development
 

@@ -20,6 +20,8 @@ from . import __version__
 from .core import (APP_ID, USERNAME, current_network, default_config,
                    load_config, normalize_key, read_status, save_config, validate_config)
 from .messages import Debounce, classify, shown_tone
+from .service import (SnapSupervisor, in_snap, serve_log_path, set_snap_login_start,
+                      snap_login_start_enabled, systemd_is_enabled, systemd_run)
 import asyncssh
 
 PROJECT_URL = 'https://github.com/krotname/AdbSshTunnel'
@@ -339,8 +341,15 @@ class PowerGlow(Gtk.Widget):
 
 
 class Application(Adw.Application):
-    def __init__(self):
+    def __init__(self, hidden=False):
         super().__init__(application_id=APP_ID, flags=Gio.ApplicationFlags.DEFAULT_FLAGS)
+        self.hidden_start = hidden
+        self.snap = in_snap()
+        self.supervisor = SnapSupervisor() if self.snap else None
+        # In Snap mode the GUI owns the serve child: once started (by the
+        # button or at hidden autostart), refresh() restarts it after crashes.
+        self.serve_managed = False
+        self.last_reconcile = 0.0
         self.window = None
         self.busy = False
         self.cfg = default_config()
@@ -439,8 +448,25 @@ class Application(Adw.Application):
         self.window.add_breakpoint(short)
         self.apply_style()
         self.style_handler = Adw.StyleManager.get_default().connect('notify::dark', self.apply_style)
+        if self.snap:
+            # The resident GUI keeps an enabled tunnel alive after the window
+            # closes; hide instead of quitting so the serve child survives.
+            self.window.connect('close-request', self.hide_on_close)
         self.open_settings()
-        self.window.present()
+        if not self.hidden_start:
+            self.window.present()
+
+    def hide_on_close(self, *_):
+        self.window.set_visible(False)
+        return True
+
+    def quit_app(self, *_):
+        if self.supervisor is not None:
+            try:
+                self.supervisor.stop()
+            except OSError:
+                pass
+        self.quit()
 
     def open_settings(self):
         try:
@@ -458,7 +484,28 @@ class Application(Adw.Application):
         if getattr(self, 'refresh_timer', None):
             GLib.source_remove(self.refresh_timer)
         self.refresh_timer = GLib.timeout_add(1000, self.refresh)
+        self.snap_initial_reconcile()
         self.refresh()
+
+    def snap_initial_reconcile(self):
+        """Adopt or start the supervised serve child in Snap mode.
+
+        A hidden autostart launch starts the serve child when the tunnel is
+        enabled, mirroring Start at sign-in. A visible launch only adopts an
+        already running child; it never starts the tunnel by itself, exactly
+        like opening the window on Debian.
+        """
+        if not self.snap or self.supervisor is None:
+            return
+        if self.supervisor.is_running():
+            self.serve_managed = True
+            return
+        if self.hidden_start and self.cfg.get('enabled'):
+            error = self.supervisor.start()
+            if error:
+                self.service_error = error
+            else:
+                self.serve_managed = True
 
     def page(self, title, tag=None):
         """A navigation page with a back button and a clamped, scrollable column."""
@@ -829,14 +876,30 @@ class Application(Adw.Application):
             'Только ключи и 127.0.0.1:5037. SSH shell, PTY, SFTP/SCP, агент, X11 и обратные туннели '
             'запрещены. Системный SSH работает отдельно.'))
         group.add(security)
-        diagnostics = Adw.ActionRow(title=self.t('Diagnostics', 'Диагностика'),
-                                    subtitle=f'journalctl --user -u {SERVICE}', subtitle_selectable=True)
+        if self.snap:
+            log_path = serve_log_path()
+            diagnostics = Adw.ActionRow(
+                title=self.t('Diagnostics', 'Диагностика'),
+                subtitle=(self.t('Log file: ', 'Файл журнала: ') + str(log_path)
+                          if log_path is not None else 'serve.log'),
+                subtitle_selectable=True)
+        else:
+            diagnostics = Adw.ActionRow(title=self.t('Diagnostics', 'Диагностика'),
+                                        subtitle=f'journalctl --user -u {SERVICE}', subtitle_selectable=True)
         group.add(diagnostics)
         project = Adw.ActionRow(title=self.t('Project page', 'Страница проекта'), subtitle=PROJECT_URL,
                                 activatable=True)
         project.add_suffix(Gtk.Image(icon_name='adbst-link-symbolic'))
         project.connect('activated', lambda _: Gtk.UriLauncher(uri=PROJECT_URL).launch(self.window, None, None))
         group.add(project)
+        if self.snap:
+            quit_row = Adw.ActionRow(title=self.t('Quit application', 'Выйти из приложения'),
+                                     subtitle=self.t('Stop the tunnel and close the app',
+                                                     'Остановить туннель и закрыть приложение'),
+                                     activatable=True)
+            quit_row.add_suffix(Gtk.Image(icon_name='application-exit-symbolic'))
+            quit_row.connect('activated', lambda _: self.quit_app())
+            group.add(quit_row)
         self.push(page)
 
     def open_problem(self):
@@ -895,11 +958,32 @@ class Application(Adw.Application):
 
     @staticmethod
     def autostart_enabled():
-        try:
-            return subprocess.run(['systemctl', '--user', 'is-enabled', SERVICE], capture_output=True,
-                                  text=True, timeout=2).stdout.strip() == 'enabled'
-        except (OSError, subprocess.SubprocessError):
-            return False
+        if in_snap():
+            return snap_login_start_enabled()
+        return systemd_is_enabled()
+
+    def snap_service(self, action):
+        assert self.supervisor is not None
+        if action == 'start':
+            error = self.supervisor.start()
+            if not error:
+                self.serve_managed = True
+            return error
+        if action == 'stop':
+            error = self.supervisor.stop()
+            if not error:
+                self.serve_managed = False
+            return error
+        if action == 'restart':
+            error = self.supervisor.restart()
+            if not error:
+                self.serve_managed = True
+            return error
+        if action == 'enable':
+            return set_snap_login_start(True)
+        if action == 'disable':
+            return set_snap_login_start(False)
+        return f'Unsupported service action: {action}'
 
     def service(self, action, callback=None):
         self.busy = True
@@ -907,11 +991,10 @@ class Application(Adw.Application):
 
         def worker():
             try:
-                subprocess.run(['systemctl', '--user', action, SERVICE],
-                               check=True, capture_output=True, text=True, timeout=15)
-                error = ''
-            except subprocess.CalledProcessError as exc:
-                error = (exc.stderr or exc.stdout or str(exc)).strip()[:300]
+                if self.snap:
+                    error = self.snap_service(action)
+                else:
+                    error = systemd_run(action)
             except (OSError, subprocess.SubprocessError) as exc:
                 error = str(exc)[:300]
 
@@ -1090,9 +1173,38 @@ class Application(Adw.Application):
         except (OSError, ValueError):
             self.state = {'state': 'error', 'error': self.t('Cannot read settings or status',
                                                             'Ошибка чтения настроек или состояния')}
+        self.reconcile_serve()
         self.render_main()
         self.update_connect()
         return True
+
+    def reconcile_serve(self):
+        """Restart a managed serve child that died under us (Snap only).
+
+        Systemd restarts the Debian service itself; in Snap mode the resident
+        GUI owns the child and must revive it when the tunnel is enabled.
+        """
+        if not self.snap or self.supervisor is None or self.busy:
+            return
+        if not (self.cfg.get('enabled') and self.serve_managed):
+            return
+        if self.supervisor.is_running():
+            return
+        now = time.monotonic()
+        if now - self.last_reconcile < 5:
+            return
+        self.last_reconcile = now
+
+        def worker():
+            error = self.supervisor.restart()
+
+            def done():
+                if error:
+                    self.service_error = error
+                self.refresh()
+                return False
+            GLib.idle_add(done)
+        threading.Thread(target=worker, daemon=True).start()
 
     def set_once(self, key, value, apply):
         if self.shown.get(key) != value:
@@ -1101,7 +1213,7 @@ class Application(Adw.Application):
 
     def render_main(self):
         identity = self.network.identity if self.network else ''
-        tone, problem = classify(self.cfg, self.state, identity, self.service_error)
+        tone, problem = classify(self.cfg, self.state, identity, self.service_error, snap=self.snap)
         self.problem = self.debounce.confirm(problem, time.monotonic())
         tone = shown_tone(tone, self.problem)
         if tone != self.tone:

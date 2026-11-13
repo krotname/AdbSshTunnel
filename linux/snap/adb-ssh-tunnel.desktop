@@ -1,0 +1,13 @@
+[Desktop Entry]
+Type=Application
+Name=ADB SSH Tunnel
+Name[ru]=ADB SSH Tunnel
+Comment=Key-only SSH tunnel to the local Linux ADB server
+Comment[ru]=SSH-туннель по ключу к локальному серверу ADB в Linux
+Exec=adb-ssh-tunnel
+Terminal=false
+Categories=Development;
+Keywords=ADB;SSH;Android;Tunnel;
+StartupWMClass=name.krot.adbsshtunnel.linux
+StartupNotify=true
+X-Purism-FormFactor=Workstation;Mobile;

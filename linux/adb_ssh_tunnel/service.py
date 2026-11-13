@@ -24,7 +24,6 @@ SERVICE = 'adb-ssh-tunnel.service'
 AUTOSTART_DESKTOP = 'adb-ssh-tunnel.desktop'
 SERVE_LOG = 'serve.log'
 SERVE_PID = 'serve.pid'
-_START_TIMEOUT = 0.0
 
 
 def in_snap() -> bool:
@@ -136,7 +135,11 @@ def parse_proc_default_route(text: str) -> str:
         parts = line.split()
         # Iface Destination Gateway Flags ...; a default route has a zero
         # destination and the RTF_GATEWAY flag.
-        if len(parts) >= 4 and parts[1] == '00000000' and int(parts[3], 16) & 2:
+        try:
+            gateway = len(parts) >= 4 and parts[1] == '00000000' and int(parts[3], 16) & 2
+        except ValueError:
+            continue
+        if gateway:
             return parts[0]
     return ''
 

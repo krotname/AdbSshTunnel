@@ -1,28 +1,31 @@
 schema: spec-driven
 
 context: |
-  ADB SSH Tunnel has two distinct products in this repository.
-  Android: Java, native C, Gradle, Android 11+, full and RuStore flavors.
-  Linux: Python, AsyncSSH, GTK 4/Libadwaita, user systemd service, Debian packages.
-  Android forwards the virtual destination 127.0.0.1:5555 to local Android adbd.
-  Linux forwards only 127.0.0.1:5037, the Linux SDK ADB server protocol.
-  SSH is key-only and forwarding-only. Network policy fails closed.
-  Android and Linux key and network policies have documented differences.
-  Existing tests and device acceptance evidence determine verified behavior.
-  CI uses one repository-scoped Red ARC runner and its existing persistent cache.
-  Never put private keys, personal device identifiers or deployment secrets here.
+  Требования, сценарии, proposal, design и tasks пишутся на русском языке.
+  Заголовки OpenSpec и ключевые слова SHALL, WHEN, THEN сохраняются для CLI.
+  В репозитории два разных продукта: Android и Linux.
+  Android: Java/native C/Gradle, Android 11+, full и RuStore.
+  Linux: Python/AsyncSSH/GTK4/Libadwaita, пользовательская systemd-служба, Debian.
+  Android перенаправляет виртуальный 127.0.0.1:5555 в локальный adbd устройства.
+  Linux перенаправляет только 127.0.0.1:5037 — протокол SDK ADB server.
+  SSH только по ключам и только forwarding. Неизвестная сеть закрывает доступ.
+  Android использует SSID/оператора; Linux — SSID/NetworkManager UUID.
+  Минимум RSA Android 2048 бит, Linux 3072 бит; лимиты Android не общие.
+  Проверку поведения определяют исходники, тесты и реальные device acceptance.
+  CI сохраняет один отдельный Red ARC runner репозитория и постоянный кэш.
+  Приватные ключи, личные идентификаторы устройств и секреты сюда не включаются.
 
 rules:
   proposal:
-    - State affected capabilities and whether Android, Linux or both change.
-    - Describe observable behavior, compatibility and security consequences.
+    - Пиши по-русски; укажи затронутые возможности и Android, Linux или обе платформы.
+    - Опиши наблюдаемое поведение, совместимость и последствия безопасности.
   specs:
-    - Use SHALL requirements and explicit WHEN/THEN scenarios.
-    - Include denied access, revocation and recovery scenarios where applicable.
-    - Keep Android adbd and the Linux SDK ADB server protocols distinct.
+    - Используй русские требования с SHALL и явные сценарии WHEN/THEN.
+    - Учитывай запрет доступа, отзыв и восстановление.
+    - Различай Android adbd и Linux SDK ADB server, сети, ключи и жизненный цикл.
   design:
-    - Link owning source files and existing tests or acceptance procedures.
-    - Preserve fail-closed behavior and the existing CI/cache contract.
+    - Ссылайся на исходники, существующие тесты и процедуры приёмки.
+    - Сохраняй закрытие доступа при неизвестных условиях и контракт CI/кэша.
   tasks:
-    - Include positive and negative tests and the exact limits of device evidence.
-    - Distinguish CI, merge, signed packages, installation and publication.
+    - Включи положительные и отрицательные проверки и границы device evidence.
+    - Различай CI, merge, подпись, установку и публикацию.

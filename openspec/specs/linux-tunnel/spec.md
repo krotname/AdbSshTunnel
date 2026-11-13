@@ -1,58 +1,45 @@
-# Linux tunnel
+# Туннель Linux
 
 ## Purpose
-
-Expose a Linux SDK ADB server to trusted computers through a restricted SSH
-gateway managed by the user's systemd session. This protocol and its network
-identities remain distinct from Android wireless debugging and Android adbd.
+Предоставить доверенным компьютерам ограниченный SSH-шлюз к Linux SDK ADB server в пользовательской systemd-сессии. Он отличается от беспроводной отладки Android и протокола adbd устройства.
 
 ## Requirements
 
-### Requirement: Only the loopback SDK ADB server is forwarded
-Linux SHALL allow the SSH username `adb` to forward only `127.0.0.1:5037`, using
-SSH port `19191` by default. Shell, exec, PTY, file transfer, agent/X11, UNIX
-socket and remote forwarding requests SHALL be rejected.
+### Requirement: Только loopback SDK ADB server
+Linux SHALL разрешать пользователю SSH `adb` forwarding только к `127.0.0.1:5037`, с портом SSH `19191` по умолчанию. Shell, exec, PTY, передача файлов, agent/X11, UNIX socket и remote forwarding SHALL отклоняться. Android-назначение 5555 здесь не поддерживается.
 
-#### Scenario: Client uses the SDK server protocol
-- **WHEN** an authorized client forwards the exact destination and uses `adb -H 127.0.0.1 -P <local-port> devices -l`
-- **THEN** it receives the Linux SDK server's list of already attached or paired devices, which may be empty
+#### Scenario: Клиент использует SDK server
+- **WHEN** авторизованный клиент перенаправляет точное назначение и вызывает `adb -H 127.0.0.1 -P <local-port> devices -l`
+- **THEN** он получает список уже подключённых или спаренных на Linux устройств, который может быть пустым
 
-#### Scenario: Client requests another target or SSH service
-- **WHEN** a client requests `localhost`, another port, a shell or reverse forwarding
-- **THEN** the SSH gateway denies the request
+#### Scenario: Другое назначение или SSH-сервис
+- **WHEN** клиент запрашивает `localhost`, другой порт, shell или reverse forwarding
+- **THEN** шлюз отклоняет запрос
 
-### Requirement: Known permitted physical network is required
-Linux SHALL start stopped with an empty allowlist, give blocked entries
-precedence and deny missing identities. Wi-Fi SHALL use SSIDs; Ethernet and
-mobile SHALL use NetworkManager connection UUIDs.
+### Requirement: Известная разрешённая физическая сеть
+Linux SHALL начинать с выключенным туннелем и пустым allowlist, отдавать приоритет запрету и закрывать доступ без идентификатора. Wi-Fi SHALL использовать SSID, Ethernet и мобильные сети — UUID соединений NetworkManager, а не Android-идентификаторы оператора.
 
-#### Scenario: New installation or unknown network
-- **WHEN** no permitted current network identity is configured
-- **THEN** the listener remains closed
+#### Scenario: Новая установка или неизвестная сеть
+- **WHEN** разрешённый идентификатор текущей сети не настроен
+- **THEN** listener остаётся закрытым
 
-### Requirement: Listener binds to one approved IPv4 address
-Linux SHALL bind only the current IPv4 address of the supported physical
-NetworkManager profile selected by the default route, rather than all interfaces.
+### Requirement: Привязка к одному разрешённому IPv4
+Linux SHALL привязываться только к текущему IPv4 поддерживаемого физического профиля NetworkManager, выбранного default route, без прослушивания всех интерфейсов.
 
-#### Scenario: VPN route has no supported physical profile
-- **WHEN** the selected route cannot be associated with an eligible physical network identity
-- **THEN** the listener remains closed
+#### Scenario: VPN-маршрут без физического профиля
+- **WHEN** выбранный маршрут нельзя сопоставить допустимой физической сети
+- **THEN** listener остаётся закрытым
 
-### Requirement: Revocation precedes continued access
-Linux SHALL close its listener and sessions when polling detects a denied
-network, changed address, key revocation, invalid configuration or unavailable
-ADB server, and resume only when an enabled tunnel again meets its prerequisites.
+### Requirement: Отзыв доступа не ждёт диагностику
+Linux SHALL закрывать listener и сессии, когда polling обнаруживает запрет сети, смену адреса, отзыв ключа, неверную конфигурацию или недоступный ADB server. Возобновление возможно только при включённом туннеле и выполненных условиях.
 
-#### Scenario: ADB is unavailable while access becomes forbidden
-- **WHEN** network policy revokes access while ADB diagnostics are stalled
-- **THEN** revocation closes existing access without waiting for the stalled diagnostic
+#### Scenario: ADB завис при отзыве доступа
+- **WHEN** сетевая политика запрещает доступ, пока ADB-диагностика не отвечает
+- **THEN** доступ закрывается без ожидания зависшей диагностики
 
-### Requirement: Background service preserves user control
-Linux SHALL manage the gateway through `adb-ssh-tunnel.service` in the user's
-systemd session. Closing the UI SHALL preserve an enabled tunnel; explicit stop
-SHALL close it. The app SHALL leave the SDK server, system sshd and routing under
-the user's control.
+### Requirement: Фоновая служба сохраняет управление
+Linux SHALL управлять шлюзом через пользовательскую `adb-ssh-tunnel.service`. Закрытие UI SHALL сохранять включённый туннель; явная остановка SHALL закрывать его. SDK server, системный sshd и маршрутизация остаются под управлением пользователя.
 
-#### Scenario: User closes and reopens the window
-- **WHEN** the UI closes while the service is enabled
-- **THEN** the service continues subject to policy and reopening the UI shows its current state
+#### Scenario: Окно закрыто и открыто снова
+- **WHEN** UI закрывается при включённой службе
+- **THEN** служба продолжает работу с учётом политики, повторно открытый UI показывает её текущее состояние

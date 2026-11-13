@@ -2,59 +2,51 @@
 
 ## MODIFIED Requirements
 
-### Requirement: Background service preserves user control
+### Requirement: Фоновая служба сохраняет управление
 
-On Debian, Linux SHALL manage the gateway through
-`adb-ssh-tunnel.service` in the user's systemd session. Inside the
-strictly confined Snap, Linux SHALL instead supervise its own `serve`
-child in the resident GUI process: closing the window hides it and
-preserves an enabled tunnel; an explicit Quit action stops the tunnel
-and closes the app. A hidden autostart launch (`--hidden`, started by
-`snap userd` when Start at sign-in is on) SHALL bring up an enabled
-tunnel without showing a window. Explicit stop SHALL close the tunnel.
-The app SHALL leave the SDK server, system sshd and routing under the
-user's control.
+На Debian Linux SHALL управлять шлюзом через пользовательскую
+`adb-ssh-tunnel.service`. В строго изолированном Snap Linux SHALL вместо
+этого запускать и контролировать собственный дочерний процесс `serve`
+в resident-процессе GUI: закрытие окна скрывает его и сохраняет включённый туннель; явное
+действие Quit останавливает туннель и закрывает приложение. Скрытый
+автозапуск (`--hidden`, запускаемый `snap userd`, когда включён «Запуск
+при входе») SHALL поднимать включённый туннель без показа окна. Явная
+остановка SHALL закрывать туннель. Приложение SHALL оставлять SDK server,
+системный sshd и маршрутизацию под управлением пользователя.
 
-#### Scenario: User closes and reopens the window
+#### Scenario: Окно закрыто и открыто снова
 
-- **WHEN** the UI window closes while the service is enabled
-- **THEN** the background process continues subject to policy and
-  reopening the UI shows its current state; in Snap mode the process
-  that owns the window keeps running hidden
+- **WHEN** UI закрывается при включённой службе
+- **THEN** служба продолжает работу с учётом политики, повторно открытый UI показывает её текущее состояние
 
-#### Scenario: Snap starts at sign-in
+#### Scenario: Snap запускается при входе
 
-- **WHEN** Start at sign-in is enabled and the user logs in
-- **THEN** the hidden app starts the serve child when the tunnel is
-  enabled and stays idle otherwise; a visible launch never starts the
-  tunnel by itself
+- **WHEN** включён «Запуск при входе» и пользователь входит в систему
+- **THEN** скрытое приложение запускает дочерний `serve`, когда туннель включён, и простаивает иначе; видимый запуск никогда не стартует туннель сам
 
 ## ADDED Requirements
 
-### Requirement: Snap repair hints avoid host service commands
+### Requirement: Snap-подсказки без команд хоста
 
-In Snap mode the tunnel states SHALL point at quitting the app from
-More and reopening it, and Diagnostics SHALL show the Snap log file
-path, instead of `systemctl`/`journalctl` commands that are unavailable
-in confinement.
+В режиме Snap состояния туннеля SHALL указывать на выход из приложения
+из «Дополнительно» и повторное открытие, а «Диагностика» SHALL показывать
+путь к Snap-файлу журнала вместо команд `systemctl`/`journalctl`,
+недоступных в изоляции.
 
-#### Scenario: Snap background process fails
+#### Scenario: Фоновый процесс Snap не запускается
 
-- **WHEN** the Snap serve child cannot start or stops unexpectedly
-- **THEN** the problem screen explains the failure without host
-  service commands and retry restarts the child
+- **WHEN** дочерний `serve` Snap не может стартовать или неожиданно останавливается
+- **THEN** экран проблемы объясняет сбой без команд хоста, а повтор запускает дочерний процесс заново
 
-### Requirement: Snap network identity uses NetworkManager D-Bus
+### Requirement: Snap определяет сеть через D-Bus NetworkManager
 
-In Snap mode Linux SHALL resolve the current network identity over the
-NetworkManager system bus (the `network-manager-observe` interface),
-falling back to procfs/ioctl only for the local address. Any failure
-SHALL stay fail-closed with no identity. Wi-Fi SHALL use the SSID,
-Ethernet and mobile SHALL use connection UUIDs, as on Debian.
+В режиме Snap Linux SHALL определять текущую сетевую идентичность через
+системную шину NetworkManager (интерфейс `network-manager-observe`),
+откатываясь к procfs/ioctl только за локальным адресом. Любой сбой SHALL
+оставаться fail-closed без идентичности. Wi-Fi SHALL использовать SSID,
+Ethernet и мобильная сеть SHALL использовать UUID подключений, как в Debian.
 
-#### Scenario: Snap cannot observe NetworkManager
+#### Scenario: Snap не видит NetworkManager
 
-- **WHEN** the `network-manager-observe` interface is disconnected or
-  the bus call fails
-- **THEN** the listener remains closed with an unknown-network problem
-  instead of guessing a policy identity
+- **WHEN** интерфейс `network-manager-observe` отключён или вызов шины неуспешен
+- **THEN** слушатель остаётся закрытым с проблемой неизвестной сети вместо угадывания идентичности

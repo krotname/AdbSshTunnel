@@ -1,51 +1,42 @@
-# Keys and server identity
+# Ключи и идентичность сервера
 
 ## Purpose
-
-Authenticate trusted computers using imported public keys, protect the server's
-persistent identity and keep platform-specific key acceptance rules explicit.
-Private client keys remain with the client, outside application configuration.
+Аутентифицировать доверенные компьютеры публичными ключами и сохранять проверяемую идентичность сервера с явными различиями платформ. Приватные ключи клиента остаются у клиента.
 
 ## Requirements
 
-### Requirement: Public-key-only authentication
-Both products SHALL authenticate SSH clients only with imported public keys
-and SHALL reject password authentication, private-key imports and authorized-key
-options supplied as part of an imported key line.
+### Requirement: Только публичные ключи
+Оба продукта SHALL аутентифицировать клиентов только импортированными публичными ключами, отклоняя парольную аутентификацию, импорт приватных ключей и параметры authorized_keys перед ключом.
 
-#### Scenario: Client uses a password or an untrusted key
-- **WHEN** a client authenticates without an accepted imported public key
-- **THEN** authentication is rejected
+#### Scenario: Пароль или недоверенный ключ
+- **WHEN** клиент не предъявил допустимый импортированный публичный ключ
+- **THEN** аутентификация отклоняется
 
-#### Scenario: Import contains a private key or key options
-- **WHEN** the user imports a private key or a public-key line prefixed with options
-- **THEN** the import is rejected rather than interpreted as server configuration
+#### Scenario: Импорт приватного ключа или параметров
+- **WHEN** импорт содержит приватный ключ или строку с опциями перед публичным ключом
+- **THEN** импорт отклоняется, а не интерпретируется как конфигурация сервера
 
-### Requirement: Platform-specific key validation
-Android SHALL accept validated Ed25519 and RSA public keys, with RSA at least
-2048 bits, at most 32 distinct keys and at most 65536 input characters. Linux
-SHALL apply its public-key parser and require RSA keys of at least 3072 bits.
+### Requirement: Разные правила проверки платформ
+Android SHALL принимать проверенные Ed25519 и RSA с RSA не менее 2048 бит, максимум 32 различных ключа и 65536 входных символов. Linux SHALL использовать свой parser публичных ключей и требовать RSA не менее 3072 бит. Лимиты Android SHALL NOT объявляться общими Linux-лимитами.
 
-#### Scenario: Android receives invalid encoded key material
-- **WHEN** key type, decoded structure, Ed25519 point or RSA parameters are invalid
-- **THEN** Android rejects the import
+#### Scenario: Неверный материал ключа Android
+- **WHEN** неверны тип, декодированная структура, точка Ed25519 или параметры RSA
+- **THEN** Android отклоняет импорт
 
-#### Scenario: Linux receives a short RSA key
-- **WHEN** an RSA public key has fewer than 3072 bits
-- **THEN** Linux rejects the import
+#### Scenario: Короткий RSA на Linux
+- **WHEN** RSA имеет менее 3072 бит
+- **THEN** Linux отклоняет импорт
 
-### Requirement: Persistent verifiable server identity
-Each installation SHALL retain a private SSH host key and expose its public
-SHA256 fingerprint so the user can verify server identity through a trusted path.
-Changing permitted client keys or network rules SHALL preserve that identity.
+### Requirement: Постоянная проверяемая идентичность
+Каждая установка SHALL сохранять приватный SSH host key и показывать его публичный SHA256 fingerprint для проверки доверенным путём. Изменения разрешённых клиентов или сетевых правил SHALL сохранять идентичность сервера.
 
-#### Scenario: Settings or package version changes
-- **WHEN** keys, network rules or a normal package upgrade change configuration
-- **THEN** the existing host identity remains available instead of being silently replaced
+#### Scenario: Изменение настроек или обычное обновление
+- **WHEN** изменены ключи клиентов, сетевые правила или версия пакета
+- **THEN** прежний host key сохраняется и не заменяется молча
 
-### Requirement: Revoked keys lose access
-The server SHALL reevaluate active access when authorized client keys change.
+### Requirement: Отозванный ключ теряет доступ
+Сервер SHALL пересматривать активный доступ при изменении разрешённых ключей.
 
-#### Scenario: An active client's key is removed
-- **WHEN** the user revokes an imported key used by a connected client
-- **THEN** that client loses access and cannot establish a new authenticated tunnel with the removed key
+#### Scenario: Удалён ключ активного клиента
+- **WHEN** пользователь отзывает импортированный ключ подключённого клиента
+- **THEN** клиент теряет доступ и не может открыть новый туннель этим ключом

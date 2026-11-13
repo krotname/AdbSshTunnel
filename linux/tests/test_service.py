@@ -64,6 +64,8 @@ class ProcRouteTest(unittest.TestCase):
     def test_garbage_is_safe(self):
         self.assertEqual(parse_proc_default_route('not a route table\n'), '')
         self.assertEqual(parse_proc_default_route(''), '')
+        self.assertEqual(parse_proc_default_route(
+            'Iface\tDestination\tGateway\tFlags\nwlan0\t00000000\t00000000\tZZ\n'), '')
 
 
 class NmIdentityTest(unittest.TestCase):

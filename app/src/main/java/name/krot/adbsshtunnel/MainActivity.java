@@ -470,6 +470,7 @@ public final class MainActivity extends AppCompatActivity {
         chipParams.topMargin = dp(2);
         messages.addView(problemChip, chipParams);
         hint = label(hero, "", 13, false, R.color.muted, 2);
+        hint.setLines(2);
         hint.setGravity(Gravity.CENTER);
         ((LinearLayout.LayoutParams) hint.getLayoutParams()).bottomMargin = dp(compact ? 8 : 16);
     }

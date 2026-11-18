@@ -442,13 +442,20 @@ public final class MainActivity extends AppCompatActivity {
         headline = label(hero, "", compact ? 22 : 26, true, R.color.ink, 1);
         headline.setGravity(Gravity.CENTER);
         ((LinearLayout.LayoutParams) headline.getLayoutParams()).topMargin = dp(compact ? 8 : 16);
-        status = label(hero, "", 15, false, R.color.muted, 2);
+        FrameLayout messages = new FrameLayout(this);
+        hero.addView(messages, new LinearLayout.LayoutParams(-1, -2));
+        status = new TextView(this);
+        status.setTextSize(15);
+        status.setTextColor(color(R.color.muted));
+        status.setLines(2);
+        status.setEllipsize(TextUtils.TruncateAt.END);
+        messages.addView(status, new FrameLayout.LayoutParams(-1, -2, Gravity.CENTER));
         status.setGravity(Gravity.CENTER);
         status.setPadding(dp(8), dp(4), dp(8), dp(4));
         status.setOnClickListener(v -> showStatus());
         problemChip = new MaterialButton(this);
         problemChip.setAllCaps(false); problemChip.setTextSize(15);
-        problemChip.setMaxLines(2); problemChip.setEllipsize(TextUtils.TruncateAt.END);
+        problemChip.setLines(2); problemChip.setEllipsize(TextUtils.TruncateAt.END);
         problemChip.setCornerRadius(dp(24)); problemChip.setMinHeight(dp(48));
         problemChip.setBackgroundTintList(ColorStateList.valueOf(color(R.color.problem_bg)));
         problemChip.setTextColor(color(R.color.tone_attention));
@@ -457,12 +464,11 @@ public final class MainActivity extends AppCompatActivity {
         problemChip.setIconTint(ColorStateList.valueOf(color(R.color.tone_attention)));
         problemChip.setIconSize(dp(20));
         problemChip.setAccessibilityLiveRegion(View.ACCESSIBILITY_LIVE_REGION_POLITE);
-        problemChip.setVisibility(View.GONE);
+        problemChip.setVisibility(View.INVISIBLE);
         problemChip.setOnClickListener(v -> showProblem());
-        LinearLayout.LayoutParams chipParams = new LinearLayout.LayoutParams(-2, -2);
-        chipParams.gravity = Gravity.CENTER_HORIZONTAL;
+        FrameLayout.LayoutParams chipParams = new FrameLayout.LayoutParams(-2, -2, Gravity.CENTER);
         chipParams.topMargin = dp(2);
-        hero.addView(problemChip, chipParams);
+        messages.addView(problemChip, chipParams);
         hint = label(hero, "", 13, false, R.color.muted, 2);
         hint.setGravity(Gravity.CENTER);
         ((LinearLayout.LayoutParams) hint.getLayoutParams()).bottomMargin = dp(compact ? 8 : 16);
@@ -550,8 +556,8 @@ public final class MainActivity extends AppCompatActivity {
                 problemChip.animate().alpha(1f).setDuration(250).start();
             }
         }
-        problemChip.setVisibility(shown ? View.VISIBLE : View.GONE);
-        status.setVisibility(shown ? View.GONE : View.VISIBLE);
+        problemChip.setVisibility(shown ? View.VISIBLE : View.INVISIBLE);
+        status.setVisibility(shown ? View.INVISIBLE : View.VISIBLE);
     }
     private void showStatus() {
         String state = SshdService.state;

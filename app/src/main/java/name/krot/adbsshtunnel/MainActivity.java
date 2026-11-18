@@ -448,6 +448,7 @@ public final class MainActivity extends AppCompatActivity {
         status.setTextSize(15);
         status.setTextColor(color(R.color.muted));
         status.setLines(2);
+        status.setFallbackLineSpacing(false);
         status.setEllipsize(TextUtils.TruncateAt.END);
         messages.addView(status, new FrameLayout.LayoutParams(-1, -2, Gravity.CENTER));
         status.setGravity(Gravity.CENTER);

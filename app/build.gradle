@@ -10,7 +10,13 @@ android {
         versionCode 15
         versionName '2.4.0'
         ndk { abiFilters 'armeabi-v7a', 'arm64-v8a', 'x86_64' }
-        externalNativeBuild { cmake { arguments '-DANDROID_SUPPORT_FLEXIBLE_PAGE_SIZES=ON'; targets 'jni-dropbear', 'tunnel-server', 'root-controller' } }
+        // Identical native inputs let AGP share one job-local build per ABI.
+        externalNativeBuild { cmake {
+            arguments '-DANDROID_SUPPORT_FLEXIBLE_PAGE_SIZES=ON',
+                "-DROOT_CONTROLLER_ASSETS_DIR=${layout.buildDirectory.dir('generated/root-controller-assets/common').get().asFile}",
+                "-DTUNNEL_JNI_DIR=${layout.buildDirectory.dir('generated/tunnel-jni/common').get().asFile}"
+            targets 'jni-dropbear', 'tunnel-server', 'root-controller'
+        } }
     }
     buildFeatures { buildConfig true }
     flavorDimensions += 'distribution'
@@ -18,23 +24,21 @@ android {
         full {
             dimension 'distribution'
             buildConfigField 'boolean', 'WIRELESS_HOLD_SUPPORTED', 'true'
-            externalNativeBuild { cmake { arguments "-DROOT_CONTROLLER_ASSETS_DIR=${layout.buildDirectory.dir('generated/root-controller-assets/full').get().asFile}", "-DTUNNEL_JNI_DIR=${layout.buildDirectory.dir('generated/tunnel-jni/full').get().asFile}" } }
         }
         rustore {
             dimension 'distribution'
             buildConfigField 'boolean', 'WIRELESS_HOLD_SUPPORTED', 'false'
-            externalNativeBuild { cmake { arguments "-DROOT_CONTROLLER_ASSETS_DIR=${layout.buildDirectory.dir('generated/root-controller-assets/rustore').get().asFile}", "-DTUNNEL_JNI_DIR=${layout.buildDirectory.dir('generated/tunnel-jni/rustore').get().asFile}" } }
         }
     }
     externalNativeBuild { cmake { path file('CMakeLists.txt'); version '3.22.1' } }
     sourceSets {
         full {
-            assets.srcDir layout.buildDirectory.dir('generated/root-controller-assets/full')
-            jniLibs.srcDir layout.buildDirectory.dir('generated/tunnel-jni/full')
+            assets.srcDir layout.buildDirectory.dir('generated/root-controller-assets/common')
+            jniLibs.srcDir layout.buildDirectory.dir('generated/tunnel-jni/common')
         }
         rustore {
-            assets.srcDir layout.buildDirectory.dir('generated/root-controller-assets/rustore')
-            jniLibs.srcDir layout.buildDirectory.dir('generated/tunnel-jni/rustore')
+            assets.srcDir layout.buildDirectory.dir('generated/root-controller-assets/common')
+            jniLibs.srcDir layout.buildDirectory.dir('generated/tunnel-jni/common')
         }
     }
     compileOptions { sourceCompatibility JavaVersion.VERSION_17; targetCompatibility JavaVersion.VERSION_17 }

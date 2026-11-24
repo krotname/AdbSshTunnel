@@ -40,6 +40,7 @@ def main():
     version = re.search(r"versionName '([^']+)'", config).group(1)
     code = re.search(r'versionCode (\d+)', config).group(1)
     permission_sets = {}
+    native_payloads = {}
     for flavor in ('full', 'rustore'):
         apks = list((root / f'app/build/outputs/apk/{flavor}/release').glob('*-unsigned.apk'))
         if len(apks) != 1:
@@ -66,6 +67,11 @@ def main():
                              f'lib/{abi}/libtunnel-server.so'):
                     if archive.getinfo(name).file_size == 0:
                         raise SystemExit(f'{flavor}: empty native payload {name}')
+                    image = archive.read(name)
+                    if flavor == 'full':
+                        native_payloads[name] = image
+                    elif native_payloads[name] != image:
+                        raise SystemExit(f'{flavor}: native payload differs from full: {name}')
                 for name in (f'lib/{abi}/libtunnel-server.so', f'assets/{abi}/root-controller'):
                     try:
                         validate_executable(archive.read(name), abi)

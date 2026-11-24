@@ -46,6 +46,10 @@ CI SHALL сохранять owner-source restriction, отдельный Red ARC
 - **WHEN** native, Linux или Android-проверки завершились ошибкой
 - **THEN** обязательный статус неуспешен и merge блокируется
 
+#### Scenario: Устранена повторная native-компиляция
+- **WHEN** общая CMake-конфигурация переиспользуется между Full и RuStore
+- **THEN** CI сохраняет оба unit-test и lint набора, native/Linux регрессии, три release-артефакта и проверку байтового совпадения native payloads без изменения runner, лимитов или кэша
+
 #### Scenario: Owner-source restriction пропустил Android job
 - **WHEN** fork или неподдерживаемый actor привёл к skipped Android
 - **THEN** итоговый обязательный статус неуспешен, сохраняя owner-only границу Red

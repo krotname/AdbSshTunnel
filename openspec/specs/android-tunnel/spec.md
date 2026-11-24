@@ -5,6 +5,13 @@
 
 ## Requirements
 
+### Requirement: Общая native-сборка дистрибутивов
+Full и RuStore SHALL использовать одинаковые native sources, flags и job-local CMake outputs для каждой из трёх ABI. Упаковка SHALL проверять байтовое совпадение всех native payloads между APK, сохраняя отдельные Java-ресурсы, manifest permissions, unit tests и lint обоих дистрибутивов. Результаты сборки SHALL NOT попадать в общий кэш зависимостей.
+
+#### Scenario: Оба release APK собраны из общей native-конфигурации
+- **WHEN** CI собирает Full APK, RuStore APK и RuStore AAB
+- **THEN** все native payloads присутствуют для armeabi-v7a, arm64-v8a и x86_64 и совпадают между APK; различие WRITE_SECURE_SETTINGS сохраняется
+
 ### Requirement: Ограниченное назначение
 Android SHALL принимать локальный TCP forwarding только к виртуальному адресу `127.0.0.1:5555` и перенаправлять его на проверенный локальный endpoint adbd. Порт SSH по умолчанию SHALL быть `19191`. Это протокол устройства adbd, а не Linux SDK ADB server на 5037.
 

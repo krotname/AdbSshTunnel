@@ -1,16 +1,17 @@
 # ADB SSH Tunnel
 
-Development: [OpenSpec contract and mandatory CI checks](openspec/README.md).
-
 **English** · [Русский](README.ru.md)
 
-![ADB SSH Tunnel: trusted computer → key-only SSH → local Android ADB](docs/images/overview.svg)
+### Let your AI agent work with your Android — over Wi-Fi or USB.
 
-### Your Android ADB, through your own SSH keys.
+Give an AI agent on your trusted computer the connection it needs to carry out
+your Android tasks: install and test apps, inspect the screen, run ADB commands
+and collect diagnostics. Once you set up and authorize access, the agent can
+work autonomously without you relaying each command.
 
-Connect a trusted computer to your phone's ADB when a USB cable is inconvenient.
-Choose the networks that can accept connections, import your public SSH key, and
-forward one local port. The tunnel reaches only this phone's local ADB.
+Use encrypted, key-only SSH over Wi-Fi, or Android's authorized USB debugging
+connection over a cable. You choose the trusted computer, SSH keys and networks
+that can reach the tunnel.
 
 **[Download APK](https://github.com/krotname/AdbSshTunnel/releases/latest)** ·
 [Setup guide](docs/USAGE.md) ·
@@ -18,11 +19,32 @@ forward one local port. The tunnel reaches only this phone's local ADB.
 
 **Android 10+** · **armeabi-v7a / arm64-v8a / x86_64** · **Version 2.4.0** · **GPL-3.0**
 
-**Linux phone or desktop?** The [Linux edition](linux/README.md) uses a native,
-adaptive GTK interface and a restricted tunnel to the Linux SDK ADB server.
-It is a separate package from the Android APK; see its setup and limitations.
-It is also available as a strictly confined Snap: `snap install adb-ssh-tunnel`
-([Snap Store page](https://snapcraft.io/adb-ssh-tunnel)).
+![AI agent on your computer → Android over Wi-Fi or USB → authorized ADB tasks](docs/images/overview.svg)
+
+## Set the task. Let the agent handle the commands.
+
+For example: “Install the test build, open the app, take a screenshot and collect
+the error log.” Use your existing AI agent and Android automation tools on the
+computer; ADB SSH Tunnel provides the connection to the phone.
+
+| Connection | How the agent reaches your Android |
+|---|---|
+| Wi-Fi | ADB SSH Tunnel forwards this phone's local ADB through encrypted SSH, with your imported public key and network rules. |
+| USB cable | The agent uses Android's built-in USB debugging after you approve the computer on the phone. SSH is not required for this path. |
+
+On compatible rooted phones, the app can also keep USB debugging enabled and
+preserve approved ADB keys. New computers still require Android authorization.
+
+## Access stays under your control
+
+- **Your keys:** SSH accepts imported public keys only. Your private key stays on the computer; verify the phone's SSH host key before connecting.
+- **Your networks:** choose allowed Wi-Fi networks and block unwanted ones. You can stop the SSH tunnel from the app.
+- **One tunnel target:** SSH forwarding reaches only this phone's local ADB; SSH shell sessions and other forwarding targets are disabled.
+
+ADB is powerful: an authorized agent can run shell commands, install apps and
+access data available to ADB. Give access only to a trusted computer and agent,
+and set the agent's action permissions accordingly. Initial Android authorization,
+pairing and any later confirmation prompts still need the owner's involvement.
 
 ## What you get
 
@@ -101,17 +123,24 @@ See the [recovery setup and its limits](docs/USAGE.md#without-root) before enabl
 - New installations start with empty network allowlists. Explicitly allow a network before expecting an SSH listener.
 - Android needs location permission and its location toggle to identify a Wi-Fi SSID; background location is needed for Wi-Fi access after reboot. The app does not request GPS coordinates. Mobile operator identification needs phone-state permission.
 - Android may disable Wireless Debugging after reboot or a network change and may require network confirmation or pairing again.
-- This is an ADB-only tunnel. Shell, PTY, file transfer, SSH agent/X11 and reverse forwarding are disabled; other forwarding targets are rejected.
+- This is an ADB-only SSH tunnel. SSH shell, PTY, SSH file transfer, SSH agent/X11 and reverse forwarding are disabled; other forwarding targets are rejected. Authorized ADB commands, including `adb shell`, remain available.
 - Mobile access needs a reachable route to the phone. Carrier NAT can prevent incoming connections; the app does not provide a relay or configure a VPN.
 
 ## Guides, support and source
 
+- [Development: OpenSpec contract and mandatory CI checks](openspec/README.md)
 - [Usage, root mode and build instructions](docs/USAGE.md)
 - [Network policy behavior](docs/network-policy-acceptance.md)
 - [Root controller](docs/root-controller-acceptance.md)
 - [Report a bug or request a feature](https://github.com/krotname/AdbSshTunnel/issues)
 - [4PDA discussion](https://4pda.to/forum/index.php?showtopic=1128500)
 - [Privacy policy](docs/PRIVACY.md) · [License](LICENSE)
+
+**Linux phone or desktop?** The [Linux edition](linux/README.md) uses a native,
+adaptive GTK interface and a restricted tunnel to the Linux SDK ADB server.
+It is a separate package from the Android APK; see its setup and limitations.
+It is also available as a strictly confined Snap: `snap install adb-ssh-tunnel`
+([Snap Store page](https://snapcraft.io/adb-ssh-tunnel)).
 
 Application code is GPL-3.0. Native SSH code comes from
 [Sshd4a](https://github.com/tfonteyn/Sshd4a/tree/897f9064a7279bff89538ec87729c43888f3b83d);

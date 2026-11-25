@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1200" height="380" viewBox="0 0 1200 380" role="img" aria-labelledby="title desc">
 <title id="title">ADB SSH Tunnel</title>
-<desc id="desc">A trusted computer connects through key-only SSH on port 19191 to the phone's local ADB. Network rules control access.</desc>
+<desc id="desc">An AI agent on your trusted computer works with your Android over Wi-Fi through key-only SSH, or over Android-authorized USB debugging. SSH keys and network rules control tunnel access.</desc>
 <defs>
 <linearGradient id="background" x2="1" y2="1"><stop stop-color="#102c29"/><stop offset="1" stop-color="#102025"/></linearGradient>
 <marker id="arrow" markerWidth="8" markerHeight="8" refX="6" refY="4" orient="auto"><path d="M0 0 8 4 0 8" fill="none" stroke="#85d9b3" stroke-width="1.5"/></marker>
@@ -10,19 +10,20 @@
 <rect x="56" y="48" width="68" height="68" rx="16" fill="#356859"/>
 <path d="m72 68 14 14-14 14m24 0h14" fill="none" stroke="#fff" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/>
 <text x="148" y="87" font-size="42" font-weight="700" fill="#f1fbf6">ADB SSH Tunnel</text>
-<text x="58" y="152" font-size="24" fill="#b6d2c6">Your keys. Your network. Your ADB.</text>
+<text x="58" y="152" font-size="24" fill="#b6d2c6">Let your AI agent work with your Android. Wi-Fi or USB.</text>
 <rect x="56" y="203" width="266" height="106" rx="15" fill="#203b38" stroke="#42665a"/>
-<text x="189" y="243" text-anchor="middle" font-size="23" font-weight="600" fill="#f1fbf6">Trusted computer</text>
-<text x="189" y="278" text-anchor="middle" font-size="20" fill="#b6d2c6">OpenSSH + adb</text>
+<text x="189" y="243" text-anchor="middle" font-size="23" font-weight="600" fill="#f1fbf6">Your AI agent</text>
+<text x="189" y="278" text-anchor="middle" font-size="20" fill="#b6d2c6">On your computer</text>
 <path d="M341 256h130" stroke="#85d9b3" stroke-width="3" marker-end="url(#arrow)"/>
-<text x="406" y="232" text-anchor="middle" font-size="18" fill="#b6d2c6">SSH :19191</text>
+<text x="406" y="225" text-anchor="middle" font-size="18" fill="#b6d2c6">Wi-Fi: SSH</text>
+<text x="406" y="289" text-anchor="middle" font-size="18" fill="#b6d2c6">or USB: ADB</text>
 <rect x="496" y="203" width="286" height="106" rx="15" fill="#203b38" stroke="#85d9b3"/>
-<text x="639" y="243" text-anchor="middle" font-size="23" font-weight="600" fill="#f1fbf6">Android phone</text>
-<text x="639" y="278" text-anchor="middle" font-size="20" fill="#b6d2c6">Keys + network rules</text>
+<text x="639" y="243" text-anchor="middle" font-size="23" font-weight="600" fill="#f1fbf6">Your Android</text>
+<text x="639" y="278" text-anchor="middle" font-size="20" fill="#b6d2c6">Authorized ADB</text>
 <path d="M802 256h83" stroke="#85d9b3" stroke-width="3" marker-end="url(#arrow)"/>
 <rect x="910" y="203" width="234" height="106" rx="15" fill="#203b38" stroke="#42665a"/>
-<text x="1027" y="243" text-anchor="middle" font-size="23" font-weight="600" fill="#f1fbf6">Local ADB</text>
-<text x="1027" y="278" text-anchor="middle" font-size="20" fill="#b6d2c6">This phone only</text>
-<text x="58" y="348" font-size="18" fill="#90b1a4">Android 11+ · Root optional · No account required</text>
+<text x="1027" y="243" text-anchor="middle" font-size="23" font-weight="600" fill="#f1fbf6">Apps and screen</text>
+<text x="1027" y="278" text-anchor="middle" font-size="20" fill="#b6d2c6">Tests and diagnostics</text>
+<text x="58" y="348" font-size="18" fill="#90b1a4">Wi-Fi: SSH keys + network rules · USB: Android authorization · Your agent, your tasks</text>
 </g>
 </svg>

@@ -4,6 +4,37 @@
 
 ### Let your AI agent work with your Android — over Wi-Fi or USB.
 
+**📋 Copy a prompt for your AI**
+
+Use the copy button at the top right of this block, then send the text to your AI agent.
+
+```text
+Help set up autonomous access to my Android over Wi-Fi or USB.
+Use ADB SSH Tunnel and its official instructions:
+https://github.com/krotname/AdbSshTunnel/blob/main/README.md
+
+Complete the available setup steps on my trusted computer yourself.
+First inspect connected devices and identify the intended phone precisely.
+If several devices are present or the connection method is unclear, ask me.
+
+For Wi-Fi, use ADB SSH Tunnel with a dedicated SSH key, verify the server's
+host key and allow only trusted networks. Keep the private key on the
+computer and add only the public key to the phone. Do not expose ADB
+or SSH to the internet or disable ADB authentication.
+
+For USB, use standard Android ADB and have me authorize this computer
+on the phone. USB access does not require an SSH tunnel.
+
+When a phone action is needed, give me a short, precise instruction,
+such as approving USB debugging or completing pairing. Do not bypass
+Android confirmations, obtain root or reset the device.
+
+Verify the connection with a safe ADB command, report the phone model
+and selected connection method, then carry out my tasks autonomously
+within the authorized scope. Install or remove apps, read personal data
+and change settings only as part of my specific requests.
+```
+
 Give an AI agent on your trusted computer the connection it needs to carry out
 your Android tasks: install and test apps, inspect the screen, run ADB commands
 and collect diagnostics. Once you set up and authorize access, the agent can

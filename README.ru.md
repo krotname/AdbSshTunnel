@@ -2,6 +2,12 @@
 
 [English](README.md) · **Русский**
 
+### Скачать из RuStore
+
+<a href="https://www.rustore.ru/catalog/app/name.krot.adbsshtunnel">
+  <img src="https://static.rustore.ru/rustore-strapi/6/logo_color_30_px_2_fa2039288f.svg" alt="Скачать ADB SSH Tunnel из RuStore" height="48">
+</a>
+
 ### Дайте ИИ-агенту доступ к вашему Android — по Wi-Fi и USB.
 
 **📋 Скопировать промпт для вашего ИИ**

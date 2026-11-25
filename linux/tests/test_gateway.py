@@ -196,6 +196,59 @@ class GatewayTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual((self.directory / 'config.json').stat().st_mode & 0o777, 0o600)
         self.assertEqual((self.directory / 'host_ed25519').stat().st_mode & 0o777, 0o600)
 
+    async def test_first_connection_requires_explicit_host_trust(self):
+        with self.assertRaises(asyncssh.HostKeyNotVerifiable):
+            await self.connect(known_hosts=([], [], []))
+        async with await self.connect() as conn:
+            reader, writer = await conn.open_connection('127.0.0.1', 5037)
+            writer.write(b'000chost:version')
+            await writer.drain()
+            self.assertEqual(await reader.readexactly(12), b'OKAY00040029')
+            writer.close()
+
+    async def test_replaced_host_key_rejects_previous_trust(self):
+        trusted = self.gateway.key().convert_to_public()
+        before = (self.directory / 'config.json').read_bytes()
+        await self.gateway.close()
+        replacement = asyncssh.generate_private_key('ssh-ed25519')
+        (self.directory / 'host_ed25519').write_bytes(replacement.export_private_key('openssh'))
+        other = Gateway(self.directory, self.runtime, lambda: self.network)
+        self.addAsyncCleanup(other.close)
+        self.assertEqual((await other.tick())['state'], 'listening')
+        with self.assertRaises(asyncssh.HostKeyNotVerifiable):
+            await self.connect(known_hosts=([trusted], [], []))
+        async with await self.connect(known_hosts=([replacement.convert_to_public()], [], [])):
+            pass
+        self.assertEqual((self.directory / 'config.json').read_bytes(), before)
+
+    async def test_client_key_replacement_preserves_host_identity(self):
+        trusted = self.gateway.key().convert_to_public()
+        before = (self.directory / 'host_ed25519').read_bytes()
+        conn = await self.connect()
+        replacement = asyncssh.generate_private_key('ssh-ed25519')
+        self.cfg['keys'] = [replacement.export_public_key().decode()]
+        save_config(self.cfg, self.directory)
+        self.assertEqual((await self.gateway.tick())['state'], 'listening')
+        await asyncio.wait_for(conn.wait_closed(), 2)
+        with self.assertRaises(asyncssh.PermissionDenied):
+            await self.connect()
+        async with await self.connect(client_keys=[replacement], known_hosts=([trusted], [], [])):
+            pass
+        self.assertEqual((self.directory / 'host_ed25519').read_bytes(), before)
+
+    async def test_corrupt_host_key_is_not_replaced_on_restart(self):
+        await self.gateway.close()
+        path = self.directory / 'host_ed25519'
+        damaged = b'not a private host key\n'
+        path.write_bytes(damaged)
+        before = (self.directory / 'config.json').read_bytes()
+        other = Gateway(self.directory, self.runtime, lambda: self.network)
+        self.addAsyncCleanup(other.close)
+        self.assertEqual((await other.tick())['state'], 'error')
+        self.assertIsNone(other.listener)
+        self.assertEqual(path.read_bytes(), damaged)
+        self.assertEqual((self.directory / 'config.json').read_bytes(), before)
+
 
 class PolicyTest(unittest.TestCase):
     def test_invalid_settings_are_rejected_before_use(self):
